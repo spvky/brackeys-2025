@@ -29,8 +29,8 @@ bool out_of_bounds(vec2 uv) {
 
 
 // MAX_STEPS can be tuned for performance
-#define THRESHOLD 0.01
-#define MAX_STEPS 1000
+#define THRESHOLD 0.02
+#define MAX_STEPS 10000
 
 void main() {
 	// convert player position to UV space.
@@ -46,11 +46,6 @@ void main() {
 
 	bool occluded = false;
 
-	if (total_distance < THRESHOLD) {
-		gl_FragColor = vec4(1);
-		return;
-	}
-
 
 	// step along the ray toward the player.
 	for (int i = 0; i < MAX_STEPS; i++) {
@@ -64,7 +59,8 @@ void main() {
 			break;
 		}
 
-		vec4 occ_sample = texture(occlusion, current_uv);
+		vec2 occlusion_sample_uv = current_uv + direction * (8 / size);
+		vec4 occ_sample = texture(occlusion, occlusion_sample_uv);
 		// if the occlusion texture is black, we hit a wall.
 		if (occ_sample.rgb == vec3(0.0)) {
 			occluded = true;
