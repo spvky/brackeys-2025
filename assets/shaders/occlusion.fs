@@ -31,6 +31,14 @@ bool out_of_bounds(vec2 uv) {
 // MAX_STEPS can be tuned for performance
 #define THRESHOLD 0.02
 #define MAX_STEPS 500
+#define CREEP 1
+
+// TODO the 'creep' macro is really trying to fix a fundamental problem that should be resolved in a different wave
+// i.e we want to show the 'primary' occluding object similar to in 'real' life. Where we can see the front surface of an occlusion.
+// However this creep is very innacurate in smaller resolution sizes. So we should really count the amount of occlusion while marching
+// and only 'occlude' if it's 'behind' the occlusion, not including the occluder.
+//
+// and subsequently deprecate 'creep'
 
 void main() {
 	// convert player position to UV space.
@@ -60,7 +68,7 @@ void main() {
 			break;
 		}
 
-		vec2 occlusion_sample_uv = current_uv + direction * (8 / size);
+		vec2 occlusion_sample_uv = current_uv + direction * (CREEP / size);
 		vec4 occ_sample = texture(occlusion, occlusion_sample_uv);
 		// if the occlusion texture is black, we hit a wall.
 		if (occ_sample.rgb == vec3(0.0)) {

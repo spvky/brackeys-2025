@@ -1,12 +1,13 @@
 const std = @import("std");
 const rl = @import("raylib");
 const character = @import("character.zig");
+const Level = @import("ldtk.zig").Ldtk;
 
 const WINDOW_WIDTH: i32 = 1080;
 const WINDOW_HEIGHT: i32 = 720;
 
-const RENDER_WIDTH: i32 = 480;
-const RENDER_HEIGHT: i32 = 360;
+const RENDER_WIDTH: i32 = 240;
+const RENDER_HEIGHT: i32 = 180;
 const TITLE = "brackeys 2025";
 
 const State = struct {
@@ -18,13 +19,13 @@ const State = struct {
     render_texture: rl.RenderTexture,
 };
 
-// just a sample level
-const level = &[_]i32{ 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1 };
-const level_width = 5;
-
 pub fn main() !void {
     rl.setConfigFlags(.{ .window_resizable = true });
     rl.initWindow(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE);
+
+    const levels = try Level.init("assets/sample.ldtk");
+    const tilesheet = try rl.loadTexture("assets/tileset.png");
+
     var player = character.Character.init(.{ .x = 100, .y = 100 });
     const state: State = .{
         .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
@@ -43,7 +44,7 @@ pub fn main() !void {
 
     rl.setShaderValue(shader, size_loc, &rl.Vector2{ .x = RENDER_WIDTH, .y = RENDER_HEIGHT }, .vec2);
     while (!rl.windowShouldClose()) {
-        const tile_width = 16;
+        const tile_width = 8;
         player.update();
         var player_pos = player.position;
         rl.setShaderValue(shader, player_pos_loc, &player_pos, .vec2);
@@ -58,20 +59,35 @@ pub fn main() !void {
         rl.clearBackground(rl.Color.white);
         state.scene.end();
 
-        for (0..level.len) |i| {
-            const tile = level[i];
-            const x = i % level_width;
-            const y = try std.math.divFloor(usize, i, level_width);
-            if (tile == 1) {
-                // drawing tile to occlusion mask
-                state.occlusion_mask.begin();
-                rl.drawRectangle(@intCast(x * tile_width), @intCast(y * tile_width), tile_width, tile_width, rl.Color.black);
-                state.occlusion_mask.end();
+        for (levels.levels) |level| {
+            var i = level.layerInstances.len;
+            while (i > 0) {
+                i -= 1;
+                const instance = level.layerInstances[i];
+                const is_wall = std.mem.eql(u8, instance.__identifier, "Walls");
 
-                // drawing 'real' tile to scene
-                state.scene.begin();
-                rl.drawRectangle(@intCast(x * tile_width), @intCast(y * tile_width), tile_width, tile_width, rl.Color.red);
-                state.scene.end();
+                for (instance.autoLayerTiles) |tile| {
+                    state.scene.begin();
+                    const flip_x = (tile.f == 1 or tile.f == 3);
+                    const flip_y = (tile.f == 2 or tile.f == 3);
+                    rl.drawTexturePro(
+                        tilesheet,
+                        .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
+                        .{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]), .width = tile_width, .height = tile_width },
+                        rl.Vector2.zero(),
+                        0,
+                        rl.Color.white,
+                    );
+                    state.scene.end();
+
+                    if (is_wall) {
+                        state.occlusion_mask.begin();
+                        rl.drawRectangle(tile.px[0], tile.px[1], tile_width, tile_width, rl.Color.black);
+                        state.occlusion_mask.end();
+
+                        // TODO: add collision here
+                    }
+                }
             }
         }
 

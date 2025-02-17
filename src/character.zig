@@ -4,7 +4,7 @@ const rl = @import("raylib");
 pub const Character = struct {
     position: rl.Vector2,
     speed: f32 = 150,
-    radius: f32 = 16,
+    radius: f32 = 4,
     velocity: rl.Vector2 = .{ .x = 0, .y = 0 },
     color: rl.Color = rl.Color.sky_blue,
 
