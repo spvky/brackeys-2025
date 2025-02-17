@@ -12,6 +12,8 @@ const float TAU = 2.0 * PI;
 uniform sampler2D texture0;
 // occlusion mask
 uniform sampler2D occlusion;
+// invisible scene
+uniform sampler2D invisible_scene;
 
 // TODO: 'fog of war' scene
 // the scene that is 'not visible'
@@ -78,6 +80,6 @@ void main() {
 
 	}
 
-	if (occluded) gl_FragColor = vec4(0, 0, 0, 1);
+	if (occluded) gl_FragColor = texture(invisible_scene, fragTexCoord);
 	else gl_FragColor = texture(texture0, fragTexCoord);
 }
