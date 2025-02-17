@@ -12,7 +12,10 @@ const TITLE = "brackeys 2025";
 const State = struct {
     /// the scene we draw to, it's dimensions are static
     scene: rl.RenderTexture,
+    /// the mask which decides what are occluders
     occlusion_mask: rl.RenderTexture,
+    /// the final render texture that is upscaled and shown to the player
+    render_texture: rl.RenderTexture,
 };
 
 // just a sample level
@@ -26,6 +29,7 @@ pub fn main() !void {
     const state: State = .{
         .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
         .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
+        .render_texture = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
     };
 
     const shader = try rl.loadShader(
@@ -40,12 +44,8 @@ pub fn main() !void {
     rl.setShaderValue(shader, size_loc, &rl.Vector2{ .x = RENDER_WIDTH, .y = RENDER_HEIGHT }, .vec2);
     while (!rl.windowShouldClose()) {
         const tile_width = 16;
-        // var mouse_pos = rl.getMousePosition();
-        // mouse_pos = mouse_pos.divide(.{ .x = WINDOW_WIDTH / RENDER_WIDTH, .y = WINDOW_HEIGHT / RENDER_HEIGHT });
         player.update();
         var player_pos = player.position;
-        player_pos = player_pos.divide(.{ .x = WINDOW_WIDTH / RENDER_WIDTH, .y = WINDOW_HEIGHT / RENDER_HEIGHT });
-
         rl.setShaderValue(shader, player_pos_loc, &player_pos, .vec2);
 
         // clearing occlusion mask
@@ -75,26 +75,31 @@ pub fn main() !void {
             }
         }
 
+        state.scene.begin();
+        //NOTE: We should draw everything into the scene, and let the shader compose into the render_texture later
+        player.draw();
+        state.scene.end();
+
+        state.render_texture.begin();
         shader.activate();
-        rl.beginDrawing();
         rl.setShaderValueTexture(shader, occlusion_mask_loc, state.occlusion_mask.texture);
-        rl.clearBackground(rl.Color.blank);
-        rl.drawTexturePro(state.scene.texture, .{
+        // we draw the scene onto the final render_texture with our shader
+        state.scene.texture.draw(0, 0, rl.Color.white);
+        shader.deactivate();
+        state.render_texture.end();
+
+        rl.beginDrawing();
+        rl.drawTexturePro(state.render_texture.texture, .{
             .x = 0,
             .y = 0,
             .width = RENDER_WIDTH,
-            .height = RENDER_HEIGHT, // inverse this to flip, OpenGL coordinates are opposite and will flip the texture
-            // i DON'T flip it now, as i want to use 'raylib' coordinates for the mouse_pos.
-            // but everything is drawn flipped on the Y axis
-            // -RENDER_HEIGHT to flip it back to normal
+            .height = RENDER_HEIGHT,
         }, .{
             .x = 0,
             .y = 0,
             .width = WINDOW_WIDTH,
             .height = WINDOW_HEIGHT,
         }, rl.Vector2.zero(), 0, rl.Color.white);
-        player.draw();
         rl.endDrawing();
-        shader.deactivate();
     }
 }

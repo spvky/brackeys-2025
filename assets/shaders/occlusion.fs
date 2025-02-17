@@ -35,6 +35,8 @@ bool out_of_bounds(vec2 uv) {
 void main() {
 	// convert player position to UV space.
 	vec2 player_uv = player_pos / size;
+	// we convert from 'raylib' position to 'opengl' position
+	player_uv.y = 1 - player_uv.y;
 
 	// calculate the normalized direction from the fragment to the player.
 	vec2 direction = normalize(player_uv - fragTexCoord);
@@ -45,7 +47,6 @@ void main() {
 	float step_size = total_distance / float(MAX_STEPS);
 
 	bool occluded = false;
-
 
 	// step along the ray toward the player.
 	for (int i = 0; i < MAX_STEPS; i++) {
