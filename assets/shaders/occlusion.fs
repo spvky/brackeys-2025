@@ -30,7 +30,7 @@ bool out_of_bounds(vec2 uv) {
 
 // MAX_STEPS can be tuned for performance
 #define THRESHOLD 0.02
-#define MAX_STEPS 10000
+#define MAX_STEPS 500
 
 void main() {
 	// convert player position to UV space.
