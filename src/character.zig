@@ -1,10 +1,12 @@
 const std = @import("std");
 const rl = @import("raylib");
+const Level = @import("ldtk.zig").Ldtk;
 
 pub const Character = struct {
     position: rl.Vector2,
     speed: f32 = 150,
     radius: f32 = 4,
+    collision_detected: bool = false,
     velocity: rl.Vector2 = .{ .x = 0, .y = 0 },
     color: rl.Color = rl.Color.sky_blue,
 
@@ -14,7 +16,7 @@ pub const Character = struct {
         return .{ .position = position };
     }
 
-    pub fn update(self: *Self) void {
+    pub fn calculate_velocity(self: *Self) void {
         var x_vel: f32 = 0;
         var y_vel: f32 = 0;
 
@@ -35,8 +37,37 @@ pub const Character = struct {
         velo_normalized.x *= (self.speed * rl.getFrameTime());
         velo_normalized.y *= (self.speed * rl.getFrameTime());
         self.velocity = velo_normalized;
-        self.position.x += self.velocity.x;
-        self.position.y += self.velocity.y;
+    }
+
+    pub fn update_position(self: *Self) void {
+        if (!self.collision_detected) {
+            self.position.x += self.velocity.x;
+            self.position.y += self.velocity.y;
+        } else {
+            self.velocity = .{ .x = 0, .y = 0 };
+        }
+        self.collision_detected = false;
+    }
+
+    pub fn collision_check(self: *Self, tile: rl.Rectangle) void {
+        const no_velocity = self.velocity.x == 0 and self.velocity.y == 0;
+        if (!self.collision_detected) {
+            if (!no_velocity) {
+                if (rl.checkCollisionCircleRec(self.projected_position(), self.radius * 0.5, tile)) {
+                    self.collision_detected = true;
+                }
+            }
+        }
+    }
+
+    pub fn debug_player(self: Self) !void {
+        var buf: [1000]u8 = undefined;
+        const output = try std.fmt.bufPrintZ(&buf, "Velocity: [{d:.2},{d:.2}]\nPosition: [{d:.2},{d:.2}]\nCollision Check: {}", .{ self.velocity.x, self.velocity.y, self.position.x, self.position.y, self.collision_detected });
+        rl.drawText(output, 2, 50, 24, rl.Color.dark_blue);
+    }
+
+    pub fn projected_position(self: Self) rl.Vector2 {
+        return .{ .x = self.position.x + self.velocity.x, .y = self.position.y + self.velocity.x };
     }
 
     pub fn draw(self: Self, camera_offset: rl.Vector2) void {

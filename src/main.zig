@@ -54,7 +54,7 @@ pub fn main() !void {
     rl.setShaderValue(shader, size_loc, &rl.Vector2{ .x = RENDER_WIDTH, .y = RENDER_HEIGHT }, .vec2);
     while (!rl.windowShouldClose()) {
         const tile_width = 8;
-        player.update();
+        player.calculate_velocity();
         var player_pos = player.position;
         state.camera.set_target(player_pos.subtract(.{ .x = RENDER_WIDTH / 2, .y = RENDER_HEIGHT / 2 }));
         state.camera.update();
@@ -130,13 +130,14 @@ pub fn main() !void {
                     if (is_wall) {
                         if (state.camera.bound_check(tile_world_pos) catch null) |camera_pos| {
                             rl.drawRectangleV(camera_pos, rl.Vector2.one().scale(tile_width), rl.Color.black);
-                            // TODO: add collision here
+                            player.collision_check(.{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]), .height = 8, .width = 8 });
                         }
                     }
                 }
                 state.occlusion_mask.end();
             }
         }
+        player.update_position();
 
         state.scene.begin();
         //NOTE: We should draw everything into the scene, and let the shader compose into the render_texture later
@@ -165,7 +166,10 @@ pub fn main() !void {
             .height = WINDOW_HEIGHT,
         }, rl.Vector2.zero(), 0, rl.Color.white);
 
+        // Ui
         rl.drawFPS(0, 0);
+        try player.debug_player();
+
         rl.endDrawing();
     }
 }
