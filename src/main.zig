@@ -193,7 +193,15 @@ const Camera = struct {
     }
 
     pub fn set_target(self: *@This(), target: rl.Vector2) void {
-        self.target_world_pos = target;
+        var x: f32 = target.x;
+        if (target.x > RENDER_WIDTH + PADDING_PX or target.x < -PADDING_PX) {
+            x = self.target_world_pos.x;
+        }
+        var y: f32 = target.y;
+        if (target.y > RENDER_HEIGHT + PADDING_PX or target.y < -PADDING_PX) {
+            y = self.target_world_pos.y;
+        }
+        self.target_world_pos = .{ .x = x, .y = y };
     }
 
     pub fn update(self: *@This()) void {
