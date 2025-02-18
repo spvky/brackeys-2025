@@ -93,6 +93,7 @@ pub const GuardState = enum { moving, waiting, alert };
 
 pub const Guard = struct {
     position: rl.Vector2,
+    velocity: rl.Vector2 = .{ .x = 0, .y = 0 },
     radius: f32 = 6,
     state: GuardState = .waiting,
     // Patrol behavior
@@ -132,16 +133,22 @@ pub const Guard = struct {
                     self.increment_patrol_index();
                 } else {
                     const delta = target_position.subtract(self.position).normalize();
-                    self.position = self.position.add(delta.scale(self.patrol_speed * rl.getFrameTime()));
+                    self.velocity = delta.scale(self.patrol_speed * rl.getFrameTime());
                 }
             },
             .waiting => {
                 if (self.wait_timer.finished) {
                     self.state = .moving;
                 }
+                self.velocity = rl.Vector2.zero();
             },
             .alert => {},
         }
+        self.apply_velocity();
+    }
+
+    pub fn apply_velocity(self: *Self) void {
+        self.position = self.position.add(self.velocity);
     }
 
     pub fn increment_patrol_index(self: *Self) void {
