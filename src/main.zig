@@ -19,7 +19,6 @@ const State = struct {
     occlusion_mask: rl.RenderTexture,
     /// the final render texture that is upscaled and shown to the player
     render_texture: rl.RenderTexture,
-
     camera: Camera,
     level: Level,
 };
@@ -69,7 +68,7 @@ pub fn main() !void {
         state.camera.set_target(target_pos, level_bounds);
         state.camera.update();
         player.update(state.level.collisions);
-        guard.update();
+        guard.update(&player);
 
         rl.setShaderValue(shader, player_pos_loc, &state.camera.get_pos_on_camera(player.position), .vec2);
 
