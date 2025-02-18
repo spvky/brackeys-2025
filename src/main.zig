@@ -81,7 +81,11 @@ pub fn main() !void {
                 for (instance.autoLayerTiles) |tile| {
                     // 'coercing' error into null, so that we can easily null-check for ease of use.
                     // might indicate that we want bound_check to return null instead of error type hm...
-                    if (state.camera.bound_check(.{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]) }) catch null) |camera_pos| {
+                    const tile_world_pos: rl.Vector2 = .{
+                        .x = @floatFromInt(tile.px[0] + instance.__pxTotalOffsetX + level.worldX),
+                        .y = @floatFromInt(tile.px[1] + instance.__pxTotalOffsetY + level.worldY),
+                    };
+                    if (state.camera.bound_check(tile_world_pos) catch null) |camera_pos| {
                         const flip_x = (tile.f == 1 or tile.f == 3);
                         const flip_y = (tile.f == 2 or tile.f == 3);
                         rl.drawTexturePro(
@@ -98,7 +102,11 @@ pub fn main() !void {
 
                 state.invisible_scene.begin();
                 for (instance.autoLayerTiles) |tile| {
-                    if (state.camera.bound_check(.{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]) }) catch null) |camera_pos| {
+                    const tile_world_pos: rl.Vector2 = .{
+                        .x = @floatFromInt(tile.px[0] + instance.__pxTotalOffsetX + level.worldX),
+                        .y = @floatFromInt(tile.px[1] + instance.__pxTotalOffsetY + level.worldY),
+                    };
+                    if (state.camera.bound_check(tile_world_pos) catch null) |camera_pos| {
                         const flip_x = (tile.f == 1 or tile.f == 3);
                         const flip_y = (tile.f == 2 or tile.f == 3);
                         rl.drawTexturePro(
@@ -115,8 +123,12 @@ pub fn main() !void {
 
                 state.occlusion_mask.begin();
                 for (instance.autoLayerTiles) |tile| {
+                    const tile_world_pos: rl.Vector2 = .{
+                        .x = @floatFromInt(tile.px[0] + instance.__pxTotalOffsetX + level.worldX),
+                        .y = @floatFromInt(tile.px[1] + instance.__pxTotalOffsetY + level.worldY),
+                    };
                     if (is_wall) {
-                        if (state.camera.bound_check(.{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]) }) catch null) |camera_pos| {
+                        if (state.camera.bound_check(tile_world_pos) catch null) |camera_pos| {
                             rl.drawRectangleV(camera_pos, rl.Vector2.one().scale(tile_width), rl.Color.black);
                             // TODO: add collision here
                         }
