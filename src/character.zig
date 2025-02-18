@@ -67,11 +67,15 @@ pub const Character = struct {
     }
 
     pub fn projected_position(self: Self) rl.Vector2 {
-        return .{ .x = self.position.x + self.velocity.x, .y = self.position.y + self.velocity.x };
+        return self.position.add(self.velocity);
     }
 
-    pub fn draw(self: Self, camera_offset: rl.Vector2) void {
+    pub fn draw(self: Self, camera_offset: rl.Vector2, show_velocity: bool) void {
         const camera_pos = self.position.subtract(camera_offset);
+        if (show_velocity) {
+            const velocity_pos = self.projected_position().subtract(camera_offset);
+            rl.drawCircleV(velocity_pos, self.radius, rl.Color.ray_white);
+        }
         rl.drawCircleV(camera_pos, self.radius, self.color);
     }
 };

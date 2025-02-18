@@ -141,7 +141,7 @@ pub fn main() !void {
 
         state.scene.begin();
         //NOTE: We should draw everything into the scene, and let the shader compose into the render_texture later
-        player.draw(state.camera.offset);
+        player.draw(state.camera.offset, false);
         state.scene.end();
 
         state.render_texture.begin();
