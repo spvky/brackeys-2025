@@ -57,6 +57,8 @@ const Level = struct {
     layerInstances: []LayerInstance,
     worldX: i32,
     worldY: i32,
+    pxWid: u32,
+    pxHei: u32,
 };
 
 const Tileset = struct {
