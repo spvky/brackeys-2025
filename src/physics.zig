@@ -154,3 +154,54 @@ pub fn simulate_rigidbodies(total_sim_time: u8) void {
         current_time += dt;
     }
 }
+
+// Broad Phase
+const AABB = struct {
+    min: rl.Vector2,
+    max: rl.Vector2,
+
+    const Self = @This();
+
+    pub fn overlaps(self: Self, rhs: Self) bool {
+        const d1x = rhs.min.x - self.max.x;
+        const d1y = rhs.min.y - self.max.y;
+        const d2x = self.min.x - rhs.max.x;
+        const d2y = self.min.y - rhs.max.y;
+
+        if (d1x > 0 or d1y > 0) {
+            return false;
+        } else if (d2x > 0 or d2y > 0) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+};
+
+//Space Partitioning
+pub const PartitionMethod = enum { sort_and_sweep, dbvt };
+pub const SpacePartitioner = struct {
+    method: PartitionMethod = .sort_and_sweep,
+};
+
+pub const Collider = struct { center: rl.Vector2, radius: f32 };
+
+// Narrow phase
+fn collide_circles(a: *Collider, b: *Collider) bool {
+    const x = a.center.x - b.center.x;
+    const y = a.center.y - b.center.y;
+
+    const sqaured_dist: f32 = (x * x) + (y * y);
+    const radius: f32 = a.radius * b.radius;
+    const r2 = radius * radius;
+    return sqaured_dist <= r2;
+}
+
+const Tile = struct {
+    position: rl.Vector2,
+    extents: rl.Vector2
+};
+
+fn tile_collision(collider: *Collider, tile: *Tile) bool {
+    
+}
