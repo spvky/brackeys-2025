@@ -1,6 +1,5 @@
 const std = @import("std");
 const rl = @import("raylib");
-const Level = @import("ldtk.zig").Ldtk;
 
 pub const Character = struct {
     position: rl.Vector2,
@@ -89,11 +88,15 @@ pub const Character = struct {
     }
 };
 
-pub const GuardState = enum { moving, waiting, alert };
+pub const GuardState = enum { moving, waiting, alert, chase };
 
 pub const Guard = struct {
     position: rl.Vector2,
+    velocity: rl.Vector2 = .{ .x = 0, .y = 0 },
+    facing: rl.Vector2 = .{ .x = 0, .y = 1 },
     radius: f32 = 6,
+    vision_range: f32 = 60,
+    vision_width: f32 = 1,
     state: GuardState = .waiting,
     // Patrol behavior
     patrol_path: std.ArrayList(rl.Vector2),
@@ -120,7 +123,8 @@ pub const Guard = struct {
         self.patrol_path.deinit();
     }
 
-    pub fn update(self: *Self) void {
+    pub fn update(self: *Self, player: *Character) void {
+        self.check_player_spotted(player);
         self.wait_timer.update();
         switch (self.state) {
             .moving => {
@@ -132,16 +136,47 @@ pub const Guard = struct {
                     self.increment_patrol_index();
                 } else {
                     const delta = target_position.subtract(self.position).normalize();
-                    self.position = self.position.add(delta.scale(self.patrol_speed * rl.getFrameTime()));
+                    self.facing = self.facing.lerp(delta, 5 * rl.getFrameTime()).normalize();
+                    self.velocity = delta.scale(self.patrol_speed * rl.getFrameTime());
                 }
             },
             .waiting => {
                 if (self.wait_timer.finished) {
                     self.state = .moving;
                 }
+                self.velocity = rl.Vector2.zero();
             },
-            .alert => {},
+            .alert => {
+                self.facing = self.facing.rotate(rl.getFrameTime() * 10.0);
+            },
+            .chase => {},
         }
+        self.apply_velocity();
+    }
+
+    pub fn check_player_spotted(self: *Self, player: *Character) void {
+        const vt = self.vision_triangle();
+        const spotted: bool = blk: {
+            if (rl.checkCollisionCircleLine(player.position, player.radius, vt[0], vt[1])) {
+                break :blk true;
+            }
+            if (rl.checkCollisionCircleLine(player.position, player.radius, vt[1], vt[2])) {
+                break :blk true;
+            }
+            if (rl.checkCollisionCircleLine(player.position, player.radius, vt[2], vt[0])) {
+                break :blk true;
+            }
+            break :blk false;
+        };
+
+        if (spotted) {
+            self.state = .alert;
+            self.velocity = rl.Vector2.zero();
+        }
+    }
+
+    pub fn apply_velocity(self: *Self) void {
+        self.position = self.position.add(self.velocity);
     }
 
     pub fn increment_patrol_index(self: *Self) void {
@@ -154,8 +189,22 @@ pub const Guard = struct {
         }
     }
 
+    pub fn vision_triangle(self: Self) [3]rl.Vector2 {
+        const a = self.position;
+        const m_a = self.position.add(self.facing.scale(self.vision_range));
+        const dir: rl.Vector2 = .{ .x = a.x - m_a.x, .y = a.y - m_a.y };
+        const orth: rl.Vector2 = .{ .x = -dir.y, .y = dir.x };
+        const h_width = self.vision_width / 2;
+        const a_l: rl.Vector2 = .{ .x = (orth.x * h_width) + m_a.x, .y = (orth.y * h_width) + m_a.y };
+        const a_r: rl.Vector2 = .{ .x = (-orth.x * h_width) + m_a.x, .y = (-orth.y * h_width) + m_a.y };
+        return [3]rl.Vector2{ a, a_l, a_r };
+    }
+
     pub fn draw(self: Self, camera_offset: rl.Vector2) void {
         const camera_pos = self.position.subtract(camera_offset);
+        const vt = self.vision_triangle();
+        const tvt = [3]rl.Vector2{ vt[0].subtract(camera_offset), vt[1].subtract(camera_offset), vt[2].subtract(camera_offset) };
+        rl.drawTriangle(tvt[2], tvt[1], tvt[0], rl.Color.yellow.alpha(0.6));
         rl.drawCircleV(camera_pos, self.radius, rl.Color.red);
     }
 };
