@@ -79,43 +79,47 @@ pub fn main() !void {
 
                 state.scene.begin();
                 for (instance.autoLayerTiles) |tile| {
-                    const flip_x = (tile.f == 1 or tile.f == 3);
-                    const flip_y = (tile.f == 2 or tile.f == 3);
-                    const camera_pos = state.camera.get_pos_on_camera(.{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]) });
-                    rl.drawTexturePro(
-                        visible,
-                        .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
-                        .{ .x = camera_pos.x, .y = camera_pos.y, .width = tile_width, .height = tile_width },
-                        rl.Vector2.zero(),
-                        0,
-                        rl.Color.white,
-                    );
+                    // 'coercing' error into null, so that we can easily null-check for ease of use.
+                    // might indicate that we want bound_check to return null instead of error type hm...
+                    if (state.camera.bound_check(.{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]) }) catch null) |camera_pos| {
+                        const flip_x = (tile.f == 1 or tile.f == 3);
+                        const flip_y = (tile.f == 2 or tile.f == 3);
+                        rl.drawTexturePro(
+                            visible,
+                            .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
+                            .{ .x = camera_pos.x, .y = camera_pos.y, .width = tile_width, .height = tile_width },
+                            rl.Vector2.zero(),
+                            0,
+                            rl.Color.white,
+                        );
+                    }
                 }
                 state.scene.end();
 
                 state.invisible_scene.begin();
                 for (instance.autoLayerTiles) |tile| {
-                    const flip_x = (tile.f == 1 or tile.f == 3);
-                    const flip_y = (tile.f == 2 or tile.f == 3);
-                    const camera_pos = state.camera.get_pos_on_camera(.{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]) });
-                    rl.drawTexturePro(
-                        invisible,
-                        .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
-                        .{ .x = camera_pos.x, .y = camera_pos.y, .width = tile_width, .height = tile_width },
-                        rl.Vector2.zero(),
-                        0,
-                        rl.Color.white,
-                    );
+                    if (state.camera.bound_check(.{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]) }) catch null) |camera_pos| {
+                        const flip_x = (tile.f == 1 or tile.f == 3);
+                        const flip_y = (tile.f == 2 or tile.f == 3);
+                        rl.drawTexturePro(
+                            invisible,
+                            .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
+                            .{ .x = camera_pos.x, .y = camera_pos.y, .width = tile_width, .height = tile_width },
+                            rl.Vector2.zero(),
+                            0,
+                            rl.Color.white,
+                        );
+                    }
                 }
                 state.invisible_scene.end();
 
                 state.occlusion_mask.begin();
                 for (instance.autoLayerTiles) |tile| {
                     if (is_wall) {
-                        const camera_pos = state.camera.get_pos_on_camera(.{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]) });
-                        rl.drawRectangleV(camera_pos, rl.Vector2.one().scale(tile_width), rl.Color.black);
-
-                        // TODO: add collision here
+                        if (state.camera.bound_check(.{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]) }) catch null) |camera_pos| {
+                            rl.drawRectangleV(camera_pos, rl.Vector2.one().scale(tile_width), rl.Color.black);
+                            // TODO: add collision here
+                        }
                     }
                 }
                 state.occlusion_mask.end();
@@ -163,6 +167,8 @@ const Camera = struct {
     offset: rl.Vector2,
     target_world_pos: rl.Vector2,
 
+    const PADDING_PX = 20;
+
     pub fn init() Camera {
         return .{
             .offset = rl.Vector2.zero(),
@@ -180,5 +186,14 @@ const Camera = struct {
 
     pub fn update(self: *@This()) void {
         self.offset = self.offset.add(self.target_world_pos.subtract(self.offset).divide(.{ .x = 20, .y = 20 }));
+    }
+
+    /// returns the position if succesful, raises 'OutOfBounds' if pos is out of bounds
+    pub fn bound_check(self: *@This(), pos: rl.Vector2) !rl.Vector2 {
+        const camera_pos = pos.subtract(self.offset);
+        if (camera_pos.x > RENDER_WIDTH + PADDING_PX or camera_pos.x < -PADDING_PX) return error.OutOfBounds;
+        if (camera_pos.y > RENDER_HEIGHT + PADDING_PX or camera_pos.y < -PADDING_PX) return error.OutOfBounds;
+
+        return camera_pos;
     }
 };
