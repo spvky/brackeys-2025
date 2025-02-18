@@ -51,18 +51,12 @@ pub fn main() !void {
 
     rl.setShaderValue(shader, size_loc, &rl.Vector2{ .x = RENDER_WIDTH, .y = RENDER_HEIGHT }, .vec2);
     while (!rl.windowShouldClose()) {
-        var target_pos = player.position.subtract(.{ .x = RENDER_WIDTH / 2, .y = RENDER_HEIGHT / 2 });
-        const level_bounds = state.level.get_bounds(0);
+        const target_pos = player.position.subtract(.{ .x = RENDER_WIDTH / 2, .y = RENDER_HEIGHT / 2 });
+        var level_bounds = state.level.get_bounds(0);
+        level_bounds.width -= RENDER_WIDTH;
+        level_bounds.height -= RENDER_HEIGHT;
 
-        // clamping camera within bounds
-        target_pos.x = @max(target_pos.x, level_bounds.x);
-        target_pos.x = @min(target_pos.x, level_bounds.x + level_bounds.width - RENDER_WIDTH);
-
-        // clamping camera within bounds
-        target_pos.y = @max(target_pos.y, level_bounds.y);
-        target_pos.y = @min(target_pos.y, level_bounds.y + level_bounds.height - RENDER_HEIGHT);
-
-        state.camera.set_target(target_pos);
+        state.camera.set_target(target_pos, level_bounds);
         state.camera.update();
         player.update(state.level.collisions);
 
@@ -138,16 +132,14 @@ const Camera = struct {
         return pos.subtract(self.offset);
     }
 
-    pub fn set_target(self: *@This(), target: rl.Vector2) void {
-        var x: f32 = target.x;
-        if (target.x > RENDER_WIDTH + PADDING_PX or target.x < -PADDING_PX) {
-            x = self.target_world_pos.x;
-        }
-        var y: f32 = target.y;
-        if (target.y > RENDER_HEIGHT + PADDING_PX or target.y < -PADDING_PX) {
-            y = self.target_world_pos.y;
-        }
-        self.target_world_pos = .{ .x = x, .y = y };
+    pub fn set_target(self: *@This(), target: rl.Vector2, bounds: rl.Rectangle) void {
+        var t = target;
+        t.x = @max(t.x, bounds.x);
+        t.x = @min(t.x, bounds.x + bounds.width);
+
+        t.y = @max(t.y, bounds.y);
+        t.y = @min(t.y, bounds.y + bounds.height);
+        self.target_world_pos = t;
     }
 
     pub fn update(self: *@This()) void {
