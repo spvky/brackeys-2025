@@ -63,7 +63,7 @@ pub const Character = struct {
     pub fn debug_player(self: Self) !void {
         var buf: [1000]u8 = undefined;
         const output = try std.fmt.bufPrintZ(&buf, "Velocity: [{d:.2},{d:.2}]\nPosition: [{d:.2},{d:.2}]\nCollision Check: {}", .{ self.velocity.x, self.velocity.y, self.position.x, self.position.y, self.collision_detected });
-        rl.drawText(output, 60, 10, 16, rl.Color.dark_blue);
+        rl.drawText(output, 2, 50, 24, rl.Color.dark_blue);
     }
 
     pub fn projected_position(self: Self) rl.Vector2 {
