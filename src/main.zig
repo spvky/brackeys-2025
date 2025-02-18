@@ -180,6 +180,7 @@ const Camera = struct {
     target_world_pos: rl.Vector2,
 
     const PADDING_PX = 20;
+    const PANNING_DELAY = 12;
 
     pub fn init() Camera {
         return .{
@@ -197,7 +198,7 @@ const Camera = struct {
     }
 
     pub fn update(self: *@This()) void {
-        self.offset = self.offset.add(self.target_world_pos.subtract(self.offset).divide(.{ .x = 20, .y = 20 }));
+        self.offset = self.offset.add(self.target_world_pos.subtract(self.offset).divide(.{ .x = PANNING_DELAY, .y = PANNING_DELAY }));
     }
 
     /// returns the position if succesful, raises 'OutOfBounds' if pos is out of bounds
