@@ -39,7 +39,8 @@ pub const Character = struct {
         self.position.y += self.velocity.y;
     }
 
-    pub fn draw(self: Self) void {
-        rl.drawCircleV(self.position, self.radius, self.color);
+    pub fn draw(self: Self, camera_offset: rl.Vector2) void {
+        const camera_pos = self.position.subtract(camera_offset);
+        rl.drawCircleV(camera_pos, self.radius, self.color);
     }
 };

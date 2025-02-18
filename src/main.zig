@@ -140,12 +140,7 @@ pub fn main() !void {
 
         state.scene.begin();
         //NOTE: We should draw everything into the scene, and let the shader compose into the render_texture later
-        {
-            // TODO super shitty way but temporary to avoid movin camera for now
-            player.position = state.camera.get_pos_on_camera(player_pos);
-            player.draw();
-            player.position = player_pos;
-        }
+        player.draw(state.camera.offset);
         state.scene.end();
 
         state.render_texture.begin();
