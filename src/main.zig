@@ -54,10 +54,14 @@ pub fn main() !void {
         var target_pos = player.position.subtract(.{ .x = RENDER_WIDTH / 2, .y = RENDER_HEIGHT / 2 });
         const level_bounds = state.level.get_bounds(0);
 
-        if (target_pos.x < level_bounds.x) target_pos.x = level_bounds.x;
-        if (target_pos.x > level_bounds.x + level_bounds.width - RENDER_WIDTH) target_pos.x = level_bounds.x + level_bounds.width - RENDER_WIDTH;
-        if (target_pos.y < level_bounds.y) target_pos.y = level_bounds.y;
-        if (target_pos.y > level_bounds.y + level_bounds.height - RENDER_HEIGHT) target_pos.y = level_bounds.y + level_bounds.height - RENDER_HEIGHT;
+        // clamping camera within bounds
+        target_pos.x = @max(target_pos.x, level_bounds.x);
+        target_pos.x = @min(target_pos.x, level_bounds.x + level_bounds.width - RENDER_WIDTH);
+
+        // clamping camera within bounds
+        target_pos.y = @max(target_pos.y, level_bounds.y);
+        target_pos.y = @min(target_pos.y, level_bounds.y + level_bounds.height - RENDER_HEIGHT);
+
         state.camera.set_target(target_pos);
         state.camera.update();
         player.update(state.level.collisions);
