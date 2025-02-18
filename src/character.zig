@@ -53,7 +53,7 @@ pub const Character = struct {
         const no_velocity = self.velocity.x == 0 and self.velocity.y == 0;
         if (!self.collision_detected) {
             if (!no_velocity) {
-                if (rl.checkCollisionCircleRec(self.projected_position(), self.radius, tile)) {
+                if (rl.checkCollisionCircleRec(self.projected_position(), self.radius * 0.5, tile)) {
                     self.collision_detected = true;
                 }
             }
