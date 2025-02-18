@@ -88,3 +88,100 @@ pub const Character = struct {
         rl.drawCircleV(camera_pos, self.radius, self.color);
     }
 };
+
+pub const GuardState = enum { moving, waiting, alert };
+
+pub const Guard = struct {
+    position: rl.Vector2,
+    radius: f32 = 6,
+    state: GuardState = .waiting,
+    // Patrol behavior
+    patrol_path: std.ArrayList(rl.Vector2),
+    patrol_speed: f32 = 25,
+    patrol_index: usize = 0,
+    wait_timer: Timer,
+    // Chase behavior
+    last_sighted: rl.Vector2 = .{ .x = 0, .y = 0 },
+
+    const Self = @This();
+
+    pub fn init(allocator: std.mem.Allocator, position: rl.Vector2, patrol_points: []rl.Vector2) !Self {
+        var patrol_path = std.ArrayList(rl.Vector2).init(allocator);
+        for (patrol_points) |p| {
+            try patrol_path.append(p);
+        }
+
+        const timer = Timer.init(1);
+
+        return Self{ .position = position, .patrol_path = patrol_path, .wait_timer = timer };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.patrol_path.deinit();
+    }
+
+    pub fn update(self: *Self) void {
+        self.wait_timer.update();
+        switch (self.state) {
+            .moving => {
+                const target_position = self.patrol_path.items[self.patrol_index];
+                if (self.position.distance(target_position) <= 0.3) {
+                    self.position = target_position;
+                    self.wait_timer.reset();
+                    self.state = .waiting;
+                    self.increment_patrol_index();
+                } else {
+                    const delta = target_position.subtract(self.position).normalize();
+                    self.position = self.position.add(delta.scale(self.patrol_speed * rl.getFrameTime()));
+                }
+            },
+            .waiting => {
+                if (self.wait_timer.finished) {
+                    self.state = .moving;
+                }
+            },
+            .alert => {},
+        }
+    }
+
+    pub fn increment_patrol_index(self: *Self) void {
+        const paths_length = self.patrol_path.items.len;
+        const new_index = self.patrol_index + 1;
+        if (new_index > paths_length - 1) {
+            self.patrol_index = 0;
+        } else {
+            self.patrol_index = new_index;
+        }
+    }
+
+    pub fn draw(self: Self, camera_offset: rl.Vector2) void {
+        const camera_pos = self.position.subtract(camera_offset);
+        rl.drawCircleV(camera_pos, self.radius, rl.Color.red);
+    }
+};
+
+pub const Timer = struct {
+    duration: f32,
+    current_time: f32,
+    finished: bool,
+
+    const Self = @This();
+
+    pub fn init(duration: f32) Self {
+        return Self{ .duration = duration, .current_time = 0, .finished = false };
+    }
+
+    pub fn update(self: *Self) void {
+        if (!self.finished) {
+            self.current_time += rl.getFrameTime();
+            if (self.current_time >= self.duration) {
+                self.finished = true;
+            }
+        }
+    }
+
+    pub fn reset(self: *Self) void {
+        self.current_time = 0;
+        self.finished = false;
+    }
+};

@@ -30,6 +30,16 @@ pub fn main() !void {
     rl.setTargetFPS(60);
 
     var player = character.Character.init(.{ .x = 100, .y = 100 });
+    // Debug guard
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    var patrol_points = [_]rl.Vector2{
+        .{ .x = 225, .y = 100 },
+        .{ .x = 225, .y = 150 },
+        .{ .x = 175, .y = 150 },
+        .{ .x = 175, .y = 100 },
+    };
+    var guard = try character.Guard.init(allocator, .{ .x = 175, .y = 100 }, patrol_points[0..]);
     var state: State = .{
         .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
         .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
@@ -59,6 +69,7 @@ pub fn main() !void {
         state.camera.set_target(target_pos, level_bounds);
         state.camera.update();
         player.update(state.level.collisions);
+        guard.update();
 
         rl.setShaderValue(shader, player_pos_loc, &state.camera.get_pos_on_camera(player.position), .vec2);
 
@@ -82,6 +93,8 @@ pub fn main() !void {
         state.scene.begin();
         //NOTE: We should draw everything into the scene, and let the shader compose into the render_texture later
         player.draw(state.camera.offset, false);
+        // Need to draw him normal style
+        guard.draw(state.camera.offset);
         state.scene.end();
 
         state.render_texture.begin();
