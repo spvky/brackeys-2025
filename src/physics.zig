@@ -197,11 +197,23 @@ fn collide_circles(a: *Collider, b: *Collider) bool {
     return sqaured_dist <= r2;
 }
 
-const Tile = struct {
-    position: rl.Vector2,
-    extents: rl.Vector2
-};
+const Tile = struct { position: rl.Vector2, extents: rl.Vector2 };
 
-fn tile_collision(collider: *Collider, tile: *Tile) bool {
-    
-}
+// fn tile_collision(collider: *Collider, tile: *Tile) bool {
+//     const x: f32 = tile.position.x;
+//     const y: f32 = tile.position.y;
+//     const half_width: f32 = tile.extents.x / 2;
+//     const half_height: f32 = tile.extents.y / 2;
+
+//     // const n: rl.Vector2 = .{.x=x-half_width,.y=y-half_height};
+//     // const s: rl.Vector2 = .{.x=x+half_width,.y=y-half_height};
+//     // const e: rl.Vector2 = .{.x=x+half_width,.y=y+half_height};
+//     // const w: rl.Vector2 = .{.x=x-half_width,.y=y+half_height};
+
+//     const n: f32 = y-half_height;
+//     const s: f32 = y+half_height;
+//     const e: f32 = x+half_width;
+//     const w: f32 = x-half_width;
+//     rl.checkCollisionCircleRec(center: Vector2, radius: f32, rec: Rectangle)
+
+// }
