@@ -72,11 +72,8 @@ pub fn main() !void {
                 const instance = level.layerInstances[i];
                 const is_wall = std.mem.eql(u8, instance.__identifier, "Walls");
 
-                //TODO measure if changing raylib state texture is expensive
-                // if so we can change the iteration here to comply more regarding performance
-                // performance kinda sucks which makes no sense, so i am thinking this is the issue
+                state.scene.begin();
                 for (instance.autoLayerTiles) |tile| {
-                    state.scene.begin();
                     const flip_x = (tile.f == 1 or tile.f == 3);
                     const flip_y = (tile.f == 2 or tile.f == 3);
                     rl.drawTexturePro(
@@ -87,9 +84,13 @@ pub fn main() !void {
                         0,
                         rl.Color.white,
                     );
-                    state.scene.end();
+                }
+                state.scene.end();
 
-                    state.invisible_scene.begin();
+                state.invisible_scene.begin();
+                for (instance.autoLayerTiles) |tile| {
+                    const flip_x = (tile.f == 1 or tile.f == 3);
+                    const flip_y = (tile.f == 2 or tile.f == 3);
                     rl.drawTexturePro(
                         invisible,
                         .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
@@ -98,16 +99,17 @@ pub fn main() !void {
                         0,
                         rl.Color.white,
                     );
-                    state.invisible_scene.end();
-
+                }
+                state.invisible_scene.end();
+                state.occlusion_mask.begin();
+                for (instance.autoLayerTiles) |tile| {
                     if (is_wall) {
-                        state.occlusion_mask.begin();
                         rl.drawRectangle(tile.px[0], tile.px[1], tile_width, tile_width, rl.Color.black);
-                        state.occlusion_mask.end();
 
                         // TODO: add collision here
                     }
                 }
+                state.occlusion_mask.end();
             }
         }
 
