@@ -39,6 +39,15 @@ pub const Character = struct {
         self.velocity = velo_normalized;
     }
 
+    pub fn update(self: *Self, collisions: []rl.Rectangle) void {
+        self.calculate_velocity();
+        for (collisions) |collision| {
+            self.collision_check(collision);
+        }
+
+        self.update_position();
+    }
+
     pub fn update_position(self: *Self) void {
         if (!self.collision_detected) {
             self.position.x += self.velocity.x;
