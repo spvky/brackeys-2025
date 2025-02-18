@@ -19,6 +19,8 @@ const State = struct {
     occlusion_mask: rl.RenderTexture,
     /// the final render texture that is upscaled and shown to the player
     render_texture: rl.RenderTexture,
+
+    camera: Camera,
 };
 
 pub fn main() !void {
@@ -31,11 +33,12 @@ pub fn main() !void {
     const invisible = try rl.loadTexture("assets/invisible.png");
 
     var player = character.Character.init(.{ .x = 100, .y = 100 });
-    const state: State = .{
+    var state: State = .{
         .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
         .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
         .render_texture = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
         .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
+        .camera = Camera.init(),
     };
 
     const shader = try rl.loadShader(
@@ -53,7 +56,9 @@ pub fn main() !void {
         const tile_width = 8;
         player.update();
         var player_pos = player.position;
-        rl.setShaderValue(shader, player_pos_loc, &player_pos, .vec2);
+        state.camera.set_target(player_pos.subtract(.{ .x = RENDER_WIDTH / 2, .y = RENDER_HEIGHT / 2 }));
+        state.camera.update();
+        rl.setShaderValue(shader, player_pos_loc, &state.camera.get_pos_on_camera(player_pos), .vec2);
 
         // clearing occlusion mask
         state.occlusion_mask.begin();
@@ -76,10 +81,11 @@ pub fn main() !void {
                 for (instance.autoLayerTiles) |tile| {
                     const flip_x = (tile.f == 1 or tile.f == 3);
                     const flip_y = (tile.f == 2 or tile.f == 3);
+                    const camera_pos = state.camera.get_pos_on_camera(.{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]) });
                     rl.drawTexturePro(
                         visible,
                         .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
-                        .{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]), .width = tile_width, .height = tile_width },
+                        .{ .x = camera_pos.x, .y = camera_pos.y, .width = tile_width, .height = tile_width },
                         rl.Vector2.zero(),
                         0,
                         rl.Color.white,
@@ -91,20 +97,23 @@ pub fn main() !void {
                 for (instance.autoLayerTiles) |tile| {
                     const flip_x = (tile.f == 1 or tile.f == 3);
                     const flip_y = (tile.f == 2 or tile.f == 3);
+                    const camera_pos = state.camera.get_pos_on_camera(.{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]) });
                     rl.drawTexturePro(
                         invisible,
                         .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
-                        .{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]), .width = tile_width, .height = tile_width },
+                        .{ .x = camera_pos.x, .y = camera_pos.y, .width = tile_width, .height = tile_width },
                         rl.Vector2.zero(),
                         0,
                         rl.Color.white,
                     );
                 }
                 state.invisible_scene.end();
+
                 state.occlusion_mask.begin();
                 for (instance.autoLayerTiles) |tile| {
                     if (is_wall) {
-                        rl.drawRectangle(tile.px[0], tile.px[1], tile_width, tile_width, rl.Color.black);
+                        const camera_pos = state.camera.get_pos_on_camera(.{ .x = @floatFromInt(tile.px[0]), .y = @floatFromInt(tile.px[1]) });
+                        rl.drawRectangleV(camera_pos, rl.Vector2.one().scale(tile_width), rl.Color.black);
 
                         // TODO: add collision here
                     }
@@ -115,7 +124,12 @@ pub fn main() !void {
 
         state.scene.begin();
         //NOTE: We should draw everything into the scene, and let the shader compose into the render_texture later
-        player.draw();
+        {
+            // TODO super shitty way but temporary to avoid movin camera for now
+            player.position = state.camera.get_pos_on_camera(player_pos);
+            player.draw();
+            player.position = player_pos;
+        }
         state.scene.end();
 
         state.render_texture.begin();
@@ -144,3 +158,27 @@ pub fn main() !void {
         rl.endDrawing();
     }
 }
+
+const Camera = struct {
+    offset: rl.Vector2,
+    target_world_pos: rl.Vector2,
+
+    pub fn init() Camera {
+        return .{
+            .offset = rl.Vector2.zero(),
+            .target_world_pos = rl.Vector2.zero(),
+        };
+    }
+
+    pub fn get_pos_on_camera(self: @This(), pos: rl.Vector2) rl.Vector2 {
+        return pos.subtract(self.offset);
+    }
+
+    pub fn set_target(self: *@This(), target: rl.Vector2) void {
+        self.target_world_pos = target;
+    }
+
+    pub fn update(self: *@This()) void {
+        self.offset = self.offset.add(self.target_world_pos.subtract(self.offset).divide(.{ .x = 20, .y = 20 }));
+    }
+};
