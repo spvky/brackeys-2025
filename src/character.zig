@@ -123,8 +123,8 @@ pub const Guard = struct {
         self.patrol_path.deinit();
     }
 
-    pub fn update(self: *Self, player: Character) void {
-        self.check_player_spotted(player);
+    pub fn update(self: *Self, player: Character, occlusions: []rl.Rectangle) void {
+        self.check_player_spotted(player, occlusions);
         self.wait_timer.update();
         switch (self.state) {
             .moving => {
@@ -154,24 +154,34 @@ pub const Guard = struct {
         self.apply_velocity();
     }
 
-    pub fn check_player_spotted(self: *Self, player: Character) void {
-        const vt = self.vision_triangle();
-        const spotted: bool = blk: {
-            if (rl.checkCollisionCircleLine(player.position, player.radius, vt[0], vt[1])) {
-                break :blk true;
-            }
-            if (rl.checkCollisionCircleLine(player.position, player.radius, vt[1], vt[2])) {
-                break :blk true;
-            }
-            if (rl.checkCollisionCircleLine(player.position, player.radius, vt[2], vt[0])) {
-                break :blk true;
-            }
-            break :blk false;
-        };
+    pub fn check_player_spotted(self: *Self, player: Character, occlusions: []rl.Rectangle) void {
+        const dist = player.position.subtract(self.position);
+        const angle_to_player = std.math.atan2(dist.y, dist.x) * (180.0 / std.math.pi);
+        const facing_angle = std.math.atan2(self.facing.y, self.facing.x) * (180.0 / std.math.pi);
+        // find angles from -180, 180 degrees
 
-        if (spotted) {
-            self.state = .alert;
-            self.velocity = rl.Vector2.zero();
+        // find our bounds in degrees
+        const half_width_degrees = self.vision_width / 2 * (180.0 / std.math.pi);
+
+        const diff = @abs(angle_to_player - facing_angle);
+        const abs_diff = @min(diff, 360 - diff);
+        if (abs_diff > half_width_degrees) {
+            return;
+        }
+
+        for (0..@intFromFloat(self.vision_range)) |i| {
+            const marching_position = self.position.moveTowards(player.position, @floatFromInt(i));
+
+            for (occlusions) |occlusion| {
+                if (rl.checkCollisionPointRec(marching_position, occlusion)) return;
+            }
+
+            const TOLERANCE = 0.01;
+            if (marching_position.subtract(player.position).length() < TOLERANCE) {
+                self.state = .alert;
+                self.velocity = rl.Vector2.zero();
+                return;
+            }
         }
     }
 

@@ -68,7 +68,7 @@ pub fn main() !void {
         state.camera.set_target(target_pos, level_bounds);
         state.camera.update();
         player.update(state.level.collisions);
-        guard.update(player);
+        guard.update(player, state.level.collisions);
 
         rl.setShaderValue(shader, player_pos_loc, &state.camera.get_pos_on_camera(player.position), .vec2);
 
