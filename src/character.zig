@@ -19,7 +19,7 @@ pub const Character = struct {
         return .{ .position = position };
     }
 
-    pub fn calculate_velocity(self: *Self) void {
+    fn calculate_velocity(self: *Self, frametime: f32) void {
         var x_vel: f32 = 0;
         var y_vel: f32 = 0;
 
@@ -37,41 +37,27 @@ pub const Character = struct {
         }
 
         var velo_normalized = rl.math.vector2Normalize(.{ .x = x_vel, .y = y_vel });
-        velo_normalized.x *= (self.speed * rl.getFrameTime());
-        velo_normalized.y *= (self.speed * rl.getFrameTime());
+        velo_normalized.x *= (self.speed * frametime);
+        velo_normalized.y *= (self.speed * frametime);
         self.velocity = velo_normalized;
         if (self.velocity.length() > 0) self.facing = self.velocity;
     }
 
     pub fn update(self: *Self, collisions: []rl.Rectangle, frametime: f32) void {
-        self.calculate_velocity();
+        self.calculate_velocity(frametime);
         for (collisions) |collision| {
-            self.collision_check(collision);
-        }
-
-        self.update_position();
-        self.animation_t += frametime;
-    }
-
-    pub fn update_position(self: *Self) void {
-        if (!self.collision_detected) {
-            self.position.x += self.velocity.x;
-            self.position.y += self.velocity.y;
-        } else {
-            self.velocity = .{ .x = 0, .y = 0 };
-        }
-        self.collision_detected = false;
-    }
-
-    pub fn collision_check(self: *Self, tile: rl.Rectangle) void {
-        const no_velocity = self.velocity.x == 0 and self.velocity.y == 0;
-        if (!self.collision_detected) {
-            if (!no_velocity) {
-                if (rl.checkCollisionCircleRec(self.projected_position(), self.radius * 0.5, tile)) {
-                    self.collision_detected = true;
-                }
+            const projected = self.projected_position();
+            if (rl.checkCollisionCircleRec(.{ .x = projected.x, .y = self.position.y }, self.radius * 0.5, collision)) {
+                self.velocity.x = 0;
+            }
+            if (rl.checkCollisionCircleRec(.{ .x = self.position.x, .y = projected.y }, self.radius * 0.5, collision)) {
+                self.velocity.y = 0;
             }
         }
+        self.position.x += self.velocity.x;
+        self.position.y += self.velocity.y;
+
+        self.animation_t += frametime;
     }
 
     pub fn debug_player(self: Self) !void {
