@@ -102,7 +102,7 @@ pub const Guard = struct {
     patrol_path: std.ArrayList(rl.Vector2),
     patrol_speed: f32 = 25,
     patrol_index: usize = 0,
-    wait_timer: Timer,
+    wait_timer: Timer = Timer.init(1),
     // Chase behavior
     last_sighted: rl.Vector2 = .{ .x = 0, .y = 0 },
 
@@ -226,7 +226,7 @@ pub const Timer = struct {
 
     const Self = @This();
 
-    pub fn init(duration: f32) Self {
+    pub fn init(comptime duration: f32) Self {
         return Self{ .duration = duration, .current_time = 0, .finished = false };
     }
 

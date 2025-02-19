@@ -30,15 +30,15 @@ pub fn main() !void {
 
     var player = character.Character.init(.{ .x = 100, .y = 100 });
     // Debug guard
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    var patrol_points = [_]rl.Vector2{
-        .{ .x = 225, .y = 100 },
-        .{ .x = 225, .y = 150 },
-        .{ .x = 175, .y = 150 },
-        .{ .x = 175, .y = 100 },
-    };
-    var guard = try character.Guard.init(allocator, .{ .x = 175, .y = 100 }, patrol_points[0..]);
+    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    // const allocator = gpa.allocator();
+    // var patrol_points = [_]rl.Vector2{
+    //     .{ .x = 225, .y = 100 },
+    //     .{ .x = 225, .y = 150 },
+    //     .{ .x = 175, .y = 150 },
+    //     .{ .x = 175, .y = 100 },
+    // };
+    // var guard = try character.Guard.init(allocator, .{ .x = 175, .y = 100 }, patrol_points[0..]);
     var state: State = .{
         .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
         .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
@@ -68,7 +68,9 @@ pub fn main() !void {
         state.camera.set_target(target_pos, level_bounds);
         state.camera.update();
         player.update(state.level.collisions);
-        guard.update(player, state.level.collisions);
+        for (state.level.guards) |*g| {
+            g.update(player, state.level.collisions);
+        }
 
         rl.setShaderValue(shader, player_pos_loc, &state.camera.get_pos_on_camera(player.position), .vec2);
 
@@ -93,7 +95,9 @@ pub fn main() !void {
         //NOTE: We should draw everything into the scene, and let the shader compose into the render_texture later
         player.draw(state.camera.offset, false);
         // Need to draw him normal style
-        guard.draw(state.camera.offset);
+        for (state.level.guards) |g| {
+            g.draw(state.camera.offset);
+        }
         state.scene.end();
 
         state.render_texture.begin();
@@ -173,22 +177,40 @@ const Level = struct {
     invisible: rl.Texture,
     visible: rl.Texture,
     collisions: []rl.Rectangle,
+    guards: []character.Guard,
 
     pub fn init(allocator: std.mem.Allocator) !Level {
         const ldtk = try Ldtk.init("assets/sample.ldtk");
         var collisions = std.ArrayList(rl.Rectangle).init(allocator);
+        var guards = std.ArrayList(character.Guard).init(allocator);
         for (ldtk.levels) |level| {
+            // Tile Parsing
             var i = level.layerInstances.len;
             while (i > 0) {
                 i -= 1;
                 const instance = level.layerInstances[i];
                 const is_wall = std.mem.eql(u8, instance.__identifier, "Walls");
+                const is_entities = std.mem.eql(u8, instance.__identifier, "Entities");
                 for (instance.autoLayerTiles) |tile| {
                     const tile_world_pos: rl.Vector2 = .{
                         .x = @floatFromInt(tile.px[0] + instance.__pxTotalOffsetX + level.worldX),
                         .y = @floatFromInt(tile.px[1] + instance.__pxTotalOffsetY + level.worldY),
                     };
                     if (is_wall) try collisions.append(.{ .x = tile_world_pos.x, .y = tile_world_pos.y, .height = 8, .width = 8 });
+                }
+
+                if (is_entities) {
+                    for (instance.entityInstances) |e| {
+                        const is_guard = std.mem.eql(u8, e.__identifier, "Guard");
+                        if (is_guard) {
+                            const position: rl.Vector2 = .{ .x = @floatFromInt(e.px[0]), .y = @floatFromInt(e.px[1]) };
+                            var patrol_path = std.ArrayList(rl.Vector2).init(allocator);
+                            for (e.fieldInstances[0].__value) |v| {
+                                try patrol_path.append(rl.Vector2{ .x = @floatFromInt(v.cx * 16), .y = @floatFromInt(v.cy * 16) });
+                            }
+                            try guards.append(character.Guard{ .position = position, .patrol_path = patrol_path });
+                        }
+                    }
                 }
             }
         }
@@ -197,6 +219,7 @@ const Level = struct {
             .visible = try rl.loadTexture("assets/visible.png"),
             .invisible = try rl.loadTexture("assets/invisible.png"),
             .collisions = try collisions.toOwnedSlice(),
+            .guards = try guards.toOwnedSlice(),
         };
     }
 
