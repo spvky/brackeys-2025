@@ -41,12 +41,26 @@ const Layer = struct {
     autoRuleGroups: ?[]AutoRuleGroup,
 };
 
+const EntityInstance = struct {
+    __identifier: []const u8,
+    px: [2]i32,
+    fieldInstances: []FieldInstance,
+};
+
+const FieldInstance = struct { __value: []Point };
+
+const Point = struct {
+    cx: i32,
+    cy: i32,
+};
+
 const LayerInstance = struct {
     __identifier: []const u8,
     __type: []const u8,
     __pxTotalOffsetX: i32,
     __pxTotalOffsetY: i32,
     intGridCsv: []i32,
+    entityInstances: []EntityInstance,
     levelId: u32,
     autoLayerTiles: []Tile,
     gridTiles: []Tile,
