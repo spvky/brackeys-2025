@@ -86,8 +86,7 @@ pub fn main() !void {
 
     rl.setShaderValue(shader, size_loc, &rl.Vector2{ .x = RENDER_WIDTH, .y = RENDER_HEIGHT }, .vec2);
     while (!rl.windowShouldClose()) {
-        var player = state.level.player;
-        const target_pos = player.position.subtract(.{ .x = RENDER_WIDTH / 2, .y = RENDER_HEIGHT / 2 });
+        const target_pos = state.level.player.position.subtract(.{ .x = RENDER_WIDTH / 2, .y = RENDER_HEIGHT / 2 });
         const frametime = rl.getFrameTime();
         var level_bounds = state.level.get_bounds(0);
         level_bounds.width -= RENDER_WIDTH;
@@ -95,17 +94,17 @@ pub fn main() !void {
 
         state.camera.set_target(target_pos, level_bounds);
         state.camera.update();
-        player.update(state.level.collisions, frametime);
-        if (player.velocity.length() > 0) {
-            try try_spawning_particle(&state, player.position, player.velocity, 10);
+        state.level.player.update(state.level.collisions, frametime);
+        if (state.level.player.velocity.length() > 0) {
+            try try_spawning_particle(&state, state.level.player.position, state.level.player.velocity, 10);
         }
 
         if (state.frame_count % 30 == 0) {
-            path = try Path.find(std.heap.page_allocator, state.level.navigation_maps[0], .{ .x = 0, .y = 0 }, Path.from_world_space_to_path_space(player.position));
+            path = try Path.find(std.heap.page_allocator, state.level.navigation_maps[0], .{ .x = 0, .y = 0 }, Path.from_world_space_to_path_space(state.level.player.position));
         }
 
         for (state.level.guards) |*g| {
-            g.update(player, state.level.collisions, frametime);
+            g.update(state.level.player, state.level.collisions, frametime);
             if (g.velocity.length() > 0) {
                 try try_spawning_particle(&state, g.position, g.velocity, 20);
             }
@@ -131,7 +130,7 @@ pub fn main() !void {
             particle.color.a = @as(u8, @min(255, @as(u64, @intFromFloat(particle.ttl * 255 * 30))));
         }
 
-        rl.setShaderValue(shader, player_pos_loc, &state.camera.get_pos_on_camera(player.position), .vec2);
+        rl.setShaderValue(shader, player_pos_loc, &state.camera.get_pos_on_camera(state.level.player.position), .vec2);
 
         // clearing occlusion mask
         state.occlusion_mask.begin();
@@ -159,7 +158,7 @@ pub fn main() !void {
             rl.drawRectangleRec(rect, particle.color);
         }
 
-        player.draw(state.camera.offset, false);
+        state.level.player.draw(state.camera.offset, false);
         // Need to draw him normal style
         for (state.level.guards) |g| {
             g.draw(state.camera.offset);
@@ -191,7 +190,7 @@ pub fn main() !void {
 
         // Ui
         rl.drawFPS(0, 0);
-        try player.debug_player();
+        try state.level.player.debug_player();
         rl.endDrawing();
         state.frame_count += 1;
     }
