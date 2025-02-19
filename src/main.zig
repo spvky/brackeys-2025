@@ -61,6 +61,7 @@ pub fn main() !void {
     rl.setShaderValue(shader, size_loc, &rl.Vector2{ .x = RENDER_WIDTH, .y = RENDER_HEIGHT }, .vec2);
     while (!rl.windowShouldClose()) {
         const target_pos = player.position.subtract(.{ .x = RENDER_WIDTH / 2, .y = RENDER_HEIGHT / 2 });
+        const frametime = rl.getFrameTime();
         var level_bounds = state.level.get_bounds(0);
         level_bounds.width -= RENDER_WIDTH;
         level_bounds.height -= RENDER_HEIGHT;
@@ -69,7 +70,7 @@ pub fn main() !void {
         state.camera.update();
         player.update(state.level.collisions);
         for (state.level.guards) |*g| {
-            g.update(player, state.level.collisions);
+            g.update(player, state.level.collisions, frametime);
         }
 
         rl.setShaderValue(shader, player_pos_loc, &state.camera.get_pos_on_camera(player.position), .vec2);
