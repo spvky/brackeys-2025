@@ -123,7 +123,7 @@ pub const Guard = struct {
         self.patrol_path.deinit();
     }
 
-    pub fn update(self: *Self, player: *Character) void {
+    pub fn update(self: *Self, player: Character) void {
         self.check_player_spotted(player);
         self.wait_timer.update();
         switch (self.state) {
@@ -154,7 +154,7 @@ pub const Guard = struct {
         self.apply_velocity();
     }
 
-    pub fn check_player_spotted(self: *Self, player: *Character) void {
+    pub fn check_player_spotted(self: *Self, player: Character) void {
         const vt = self.vision_triangle();
         const spotted: bool = blk: {
             if (rl.checkCollisionCircleLine(player.position, player.radius, vt[0], vt[1])) {
