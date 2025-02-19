@@ -59,17 +59,6 @@ pub fn main() !void {
     rl.initWindow(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE);
     rl.setTargetFPS(60);
 
-    var player = character.Character.init(.{ .x = 100, .y = 100 });
-    // Debug guard
-    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    // const allocator = gpa.allocator();
-    // var patrol_points = [_]rl.Vector2{
-    //     .{ .x = 225, .y = 100 },
-    //     .{ .x = 225, .y = 150 },
-    //     .{ .x = 175, .y = 150 },
-    //     .{ .x = 175, .y = 100 },
-    // };
-    // var guard = try character.Guard.init(allocator, .{ .x = 175, .y = 100 }, patrol_points[0..]);
     var state: State = .{
         .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
         .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
@@ -97,6 +86,7 @@ pub fn main() !void {
 
     rl.setShaderValue(shader, size_loc, &rl.Vector2{ .x = RENDER_WIDTH, .y = RENDER_HEIGHT }, .vec2);
     while (!rl.windowShouldClose()) {
+        var player = state.level.player;
         const target_pos = player.position.subtract(.{ .x = RENDER_WIDTH / 2, .y = RENDER_HEIGHT / 2 });
         const frametime = rl.getFrameTime();
         var level_bounds = state.level.get_bounds(0);
@@ -202,7 +192,6 @@ pub fn main() !void {
         // Ui
         rl.drawFPS(0, 0);
         try player.debug_player();
-
         rl.endDrawing();
         state.frame_count += 1;
     }
@@ -256,10 +245,11 @@ const Level = struct {
     visible: rl.Texture,
     collisions: []rl.Rectangle,
     guards: []character.Guard,
-    /// [level][y][x]
+    player: character.Player,
     navigation_maps: [][][]bool,
 
     pub fn init(allocator: std.mem.Allocator) !Level {
+        var player: character.Player = undefined;
         const ldtk = try Ldtk.init("assets/sample.ldtk");
         var collisions = std.ArrayList(rl.Rectangle).init(allocator);
         var guards = std.ArrayList(character.Guard).init(allocator);
@@ -294,6 +284,7 @@ const Level = struct {
                 if (is_entities) {
                     for (instance.entityInstances) |e| {
                         const is_guard = std.mem.eql(u8, e.__identifier, "Guard");
+                        const is_player = std.mem.eql(u8, e.__identifier, "Player");
                         if (is_guard) {
                             const position: rl.Vector2 = .{ .x = @floatFromInt(e.px[0]), .y = @floatFromInt(e.px[1]) };
                             var patrol_path = std.ArrayList(rl.Vector2).init(allocator);
@@ -301,6 +292,10 @@ const Level = struct {
                                 try patrol_path.append(rl.Vector2{ .x = @floatFromInt(v.cx * 16), .y = @floatFromInt(v.cy * 16) });
                             }
                             try guards.append(character.Guard{ .position = position, .patrol_path = patrol_path });
+                        }
+                        if (is_player) {
+                            const position: rl.Vector2 = .{ .x = @floatFromInt(e.px[0]), .y = @floatFromInt(e.px[1]) };
+                            player = character.Player.init(position);
                         }
                     }
                 }
@@ -321,6 +316,7 @@ const Level = struct {
             .invisible = try rl.loadTexture("assets/invisible.png"),
             .collisions = try collisions.toOwnedSlice(),
             .guards = try guards.toOwnedSlice(),
+            .player = player,
             .navigation_maps = try navigation_maps.toOwnedSlice(),
         };
     }

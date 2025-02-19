@@ -2,7 +2,7 @@ const std = @import("std");
 const rl = @import("raylib");
 const util = @import("utils.zig");
 
-pub const Character = struct {
+pub const Player = struct {
     position: rl.Vector2,
     speed: f32 = 80,
     radius: f32 = 4,
@@ -124,7 +124,7 @@ pub const Guard = struct {
         self.patrol_path.deinit();
     }
 
-    pub fn update(self: *Self, player: Character, occlusions: []rl.Rectangle, frametime: f32) void {
+    pub fn update(self: *Self, player: Player, occlusions: []rl.Rectangle, frametime: f32) void {
         self.check_player_spotted(player, occlusions);
         self.wait_timer.update(frametime);
         self.turning_timer.update(frametime);
@@ -163,7 +163,7 @@ pub const Guard = struct {
         self.animation_t += frametime;
     }
 
-    pub fn check_player_spotted(self: *Self, player: Character, occlusions: []rl.Rectangle) void {
+    pub fn check_player_spotted(self: *Self, player: Player, occlusions: []rl.Rectangle) void {
         const dist = player.position.subtract(self.position);
         const angle_to_player = std.math.atan2(dist.y, dist.x) * (180.0 / std.math.pi);
         const facing_angle = std.math.atan2(self.facing.y, self.facing.x) * (180.0 / std.math.pi);
