@@ -10,6 +10,13 @@ const RENDER_WIDTH: i32 = 240;
 const RENDER_HEIGHT: i32 = 180;
 const TITLE = "brackeys 2025";
 
+const Particle = struct {
+    rect: rl.Rectangle,
+    color: rl.Color,
+    velocity: rl.Vector2,
+    ttl: f32,
+};
+
 const State = struct {
     /// the scene we draw to, it's dimensions are static
     scene: rl.RenderTexture,
@@ -21,6 +28,9 @@ const State = struct {
     render_texture: rl.RenderTexture,
     camera: Camera,
     level: Level,
+    particles: std.ArrayList(Particle),
+    particle_timer: f32 = 0,
+    frame_count: u32 = 0,
 };
 
 pub fn main() !void {
@@ -46,6 +56,7 @@ pub fn main() !void {
         .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
         .camera = Camera.init(),
         .level = try Level.init(std.heap.page_allocator),
+        .particles = std.ArrayList(Particle).init(std.heap.page_allocator),
     };
 
     const shader = try rl.loadShader(
@@ -69,6 +80,49 @@ pub fn main() !void {
         state.camera.set_target(target_pos, level_bounds);
         state.camera.update();
         player.update(state.level.collisions, frametime);
+        if (player.velocity.length() > 0) {
+            if (state.particle_timer == 0) {
+                var velocity = player.velocity.scale(-0.1);
+
+                const f: f32 = @floatFromInt(state.frame_count);
+                velocity.x += std.math.sin(f) / 20;
+                velocity.y += std.math.sin(f) / 20;
+                const position: rl.Vector2 = .{
+                    .x = player.position.x + std.math.sin(f),
+                    .y = player.position.y + std.math.sin(f),
+                };
+                try state.particles.append(.{
+                    .rect = .{ .x = position.x, .y = position.y, .width = 2, .height = 2 },
+                    .color = rl.Color.ray_white,
+                    .ttl = 0.15,
+                    .velocity = velocity.normalize(),
+                });
+
+                state.particle_timer = 0.12;
+            }
+        }
+
+        state.particle_timer = @max(state.particle_timer - frametime, 0);
+        var i: usize = state.particles.items.len;
+        while (i > 0) {
+            i -= 1;
+            var particle = &state.particles.items[i];
+
+            particle.ttl = @max(particle.ttl - frametime, 0);
+            if (particle.ttl == 0) {
+                _ = state.particles.swapRemove(i);
+            }
+
+            particle.rect.x += particle.velocity.x;
+            particle.rect.y += particle.velocity.y;
+
+            // we need to convert from 0..1 to 0..255.
+            // and then we need to clamp between 0..255 because the maximum size of a u8
+            // this means that it will step-wise interpolate from 1> -> 255, to 0 -> 0.
+            // but our particles live for a very short time so we can accelerate by 30 times.
+            particle.color.a = @as(u8, @min(255, @as(u64, @intFromFloat(particle.ttl * 255 * 30))));
+        }
+
         for (state.level.guards) |*g| {
             g.update(player, state.level.collisions, frametime);
         }
@@ -94,11 +148,19 @@ pub fn main() !void {
 
         state.scene.begin();
         //NOTE: We should draw everything into the scene, and let the shader compose into the render_texture later
+        for (state.particles.items) |particle| {
+            var rect = particle.rect;
+            rect.x -= state.camera.offset.x;
+            rect.y -= state.camera.offset.y;
+            rl.drawRectangleRec(rect, particle.color);
+        }
+
         player.draw(state.camera.offset, false);
         // Need to draw him normal style
         for (state.level.guards) |g| {
             g.draw(state.camera.offset);
         }
+
         state.scene.end();
 
         state.render_texture.begin();
@@ -128,6 +190,7 @@ pub fn main() !void {
         try player.debug_player();
 
         rl.endDrawing();
+        state.frame_count += 1;
     }
 }
 
