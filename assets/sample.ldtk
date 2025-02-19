@@ -11,7 +11,7 @@
 	"iid": "01df5020-e920-11ef-a7ea-313d61c972ad",
 	"jsonVersion": "1.5.3",
 	"appBuildId": 473703,
-	"nextUid": 85,
+	"nextUid": 86,
 	"identifierStyle": "Capitalize",
 	"toc": [{
 		"identifier": "Guard",
@@ -32,6 +32,14 @@
 				"entityIid": "839bd200-e920-11ef-98fa-69f45485b3ba"
 			}, "worldX": 328, "worldY": 264, "widPx": 16, "heiPx": 16, "fields": {
 				"Point": [ { "cx": 20, "cy": 18 }, { "cx": 23, "cy": 18 }, { "cx": 23, "cy": 16 }, { "cx": 20, "cy": 16 } ]
+			} },
+			{ "iids": {
+				"worldIid": "01df9e40-e920-11ef-a7ea-77db69a0e14f",
+				"levelIid": "01dfc550-e920-11ef-a7ea-056753a2e979",
+				"layerIid": "e16ccf70-e920-11ef-98fa-590abc1ad2a3",
+				"entityIid": "8bf8a640-e920-11ef-98fa-1b966e6cee35"
+			}, "worldX": 8, "worldY": 8, "widPx": 16, "heiPx": 16, "fields": {
+				"Point": [ { "cx": 25, "cy": 0 }, { "cx": 25, "cy": 21 }, { "cx": 0, "cy": 21 }, { "cx": 0, "cy": 0 } ]
 			} }
 		]
 	}],
@@ -1175,6 +1183,41 @@
 					"tilesetUid": null
 				}
 			]
+		},
+		{
+			"identifier": "Player",
+			"uid": 85,
+			"tags": [],
+			"exportToToc": false,
+			"allowOutOfBounds": false,
+			"doc": null,
+			"width": 16,
+			"height": 16,
+			"resizableX": false,
+			"resizableY": false,
+			"minWidth": null,
+			"maxWidth": null,
+			"minHeight": null,
+			"maxHeight": null,
+			"keepAspectRatio": false,
+			"tileOpacity": 1,
+			"fillOpacity": 1,
+			"lineOpacity": 1,
+			"hollow": false,
+			"color": "#25B9EF",
+			"renderMode": "Rectangle",
+			"showName": true,
+			"tilesetId": null,
+			"tileRenderMode": "FitInside",
+			"tileRect": null,
+			"uiTileRect": null,
+			"nineSliceBorders": [],
+			"maxCount": 0,
+			"limitScope": "PerLevel",
+			"limitBehavior": "MoveLastOne",
+			"pivotX": 0,
+			"pivotY": 0,
+			"fieldDefs": []
 		}
 	], "tilesets": [
 		{
@@ -1301,6 +1344,50 @@
 							} ] }],
 							"__worldX": 328,
 							"__worldY": 264
+						},
+						{
+							"__identifier": "Guard",
+							"__grid": [0,0],
+							"__pivot": [0.5,0.5],
+							"__tags": [],
+							"__tile": null,
+							"__smartColor": "#BE2F2F",
+							"iid": "8bf8a640-e920-11ef-98fa-1b966e6cee35",
+							"width": 16,
+							"height": 16,
+							"defUid": 81,
+							"px": [8,8],
+							"fieldInstances": [{ "__identifier": "Point", "__type": "Array<Point>", "__value": [ { "cx": 25, "cy": 0 }, { "cx": 25, "cy": 21 }, { "cx": 0, "cy": 21 }, { "cx": 0, "cy": 0 } ], "__tile": null, "defUid": 82, "realEditorValues": [ {
+								"id": "V_String",
+								"params": ["25,0"]
+							}, {
+								"id": "V_String",
+								"params": ["25,21"]
+							}, {
+								"id": "V_String",
+								"params": ["0,21"]
+							}, {
+								"id": "V_String",
+								"params": ["0,0"]
+							} ] }],
+							"__worldX": 8,
+							"__worldY": 8
+						},
+						{
+							"__identifier": "Player",
+							"__grid": [11,9],
+							"__pivot": [0,0],
+							"__tags": [],
+							"__tile": null,
+							"__smartColor": "#25B9EF",
+							"iid": "b3a13e80-e920-11ef-98fa-574574ae853b",
+							"width": 16,
+							"height": 16,
+							"defUid": 85,
+							"px": [176,144],
+							"fieldInstances": [],
+							"__worldX": 176,
+							"__worldY": 144
 						}
 					]
 				},
