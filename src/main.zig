@@ -80,7 +80,7 @@ pub fn main() !void {
     };
 
     const before = std.time.microTimestamp();
-    const path = try find_path(std.heap.page_allocator, state.level.navigation_maps[0], .{ .x = 0, .y = 0 }, .{ .x = 10, .y = 12 });
+    var path = try find_path(std.heap.page_allocator, state.level.navigation_maps[0], .{ .x = 0, .y = 0 }, .{ .x = 10, .y = 12 });
     const after = std.time.microTimestamp();
     std.log.debug("pathfinding took: {d:.2}µs", .{after - before});
 
@@ -107,6 +107,10 @@ pub fn main() !void {
         player.update(state.level.collisions, frametime);
         if (player.velocity.length() > 0) {
             try try_spawning_particle(&state, player.position, player.velocity, 10);
+        }
+
+        if (state.frame_count % 30 == 0) {
+            path = try find_path(std.heap.page_allocator, state.level.navigation_maps[0], .{ .x = 0, .y = 0 }, .{ .x = @divFloor(player.position.x, 8), .y = @divFloor(player.position.y, 8) });
         }
 
         for (state.level.guards) |*g| {
