@@ -40,7 +40,7 @@ pub const Character = struct {
         velo_normalized.x *= (self.speed * frametime);
         velo_normalized.y *= (self.speed * frametime);
         self.velocity = velo_normalized;
-        if (self.velocity.length() > 0) self.facing = self.velocity;
+        if (self.velocity.length() > 0) self.facing = self.facing.lerp(self.velocity, frametime * 10);
     }
 
     pub fn update(self: *Self, collisions: []rl.Rectangle, frametime: f32) void {
