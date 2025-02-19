@@ -1,5 +1,6 @@
 const std = @import("std");
 const rl = @import("raylib");
+const util = @import("utils.zig");
 
 pub const Character = struct {
     position: rl.Vector2,
@@ -94,6 +95,7 @@ pub const Guard = struct {
     position: rl.Vector2,
     velocity: rl.Vector2 = .{ .x = 0, .y = 0 },
     facing: rl.Vector2 = .{ .x = 0, .y = 1 },
+    start_facing: rl.Vector2 = .{ .x = 0, .y = 1 },
     radius: f32 = 6,
     vision_range: f32 = 60,
     vision_width: f32 = 1,
@@ -103,6 +105,7 @@ pub const Guard = struct {
     patrol_speed: f32 = 25,
     patrol_index: usize = 0,
     wait_timer: Timer = Timer.init(1),
+    turning_timer: Timer = Timer.init(0.75),
     // Chase behavior
     last_sighted: rl.Vector2 = .{ .x = 0, .y = 0 },
 
@@ -114,40 +117,45 @@ pub const Guard = struct {
             try patrol_path.append(p);
         }
 
-        const timer = Timer.init(1);
-
-        return Self{ .position = position, .patrol_path = patrol_path, .wait_timer = timer };
+        return Self{ .position = position, .patrol_path = patrol_path };
     }
 
     pub fn deinit(self: *Self) void {
         self.patrol_path.deinit();
     }
 
-    pub fn update(self: *Self, player: Character, occlusions: []rl.Rectangle) void {
+    pub fn update(self: *Self, player: Character, occlusions: []rl.Rectangle, frametime: f32) void {
         self.check_player_spotted(player, occlusions);
-        self.wait_timer.update();
+        self.wait_timer.update(frametime);
+        self.turning_timer.update(frametime);
+
+        const target_position = self.patrol_path.items[self.patrol_index];
         switch (self.state) {
             .moving => {
-                const target_position = self.patrol_path.items[self.patrol_index];
                 if (self.position.distance(target_position) <= 0.3) {
                     self.position = target_position;
                     self.wait_timer.reset();
                     self.state = .waiting;
+                    self.start_facing = self.facing;
                     self.increment_patrol_index();
                 } else {
                     const delta = target_position.subtract(self.position).normalize();
-                    self.facing = self.facing.lerp(delta, 5 * rl.getFrameTime()).normalize();
-                    self.velocity = delta.scale(self.patrol_speed * rl.getFrameTime());
+                    const progress = self.turning_timer.current_time / self.turning_timer.duration;
+                    const f = util.ease_in_out_back(progress);
+                    self.facing.x = std.math.lerp(self.start_facing.x, delta.x, f);
+                    self.facing.y = std.math.lerp(self.start_facing.y, delta.y, f);
+                    self.velocity = delta.scale(self.patrol_speed * frametime);
                 }
             },
             .waiting => {
                 if (self.wait_timer.finished) {
                     self.state = .moving;
+                    self.turning_timer.reset();
                 }
                 self.velocity = rl.Vector2.zero();
             },
             .alert => {
-                self.facing = self.facing.rotate(rl.getFrameTime() * 10.0);
+                self.facing = self.facing.rotate(frametime * 10.0);
             },
             .chase => {},
         }
@@ -185,11 +193,11 @@ pub const Guard = struct {
         }
     }
 
-    pub fn apply_velocity(self: *Self) void {
+    fn apply_velocity(self: *Self) void {
         self.position = self.position.add(self.velocity);
     }
 
-    pub fn increment_patrol_index(self: *Self) void {
+    fn increment_patrol_index(self: *Self) void {
         const paths_length = self.patrol_path.items.len;
         const new_index = self.patrol_index + 1;
         if (new_index > paths_length - 1) {
@@ -199,7 +207,7 @@ pub const Guard = struct {
         }
     }
 
-    pub fn vision_triangle(self: Self) [3]rl.Vector2 {
+    fn vision_triangle(self: Self) [3]rl.Vector2 {
         const a = self.position;
         const m_a = self.position.add(self.facing.scale(self.vision_range));
         const dir: rl.Vector2 = .{ .x = a.x - m_a.x, .y = a.y - m_a.y };
@@ -230,9 +238,9 @@ pub const Timer = struct {
         return Self{ .duration = duration, .current_time = 0, .finished = false };
     }
 
-    pub fn update(self: *Self) void {
+    pub fn update(self: *Self, frametime: f32) void {
         if (!self.finished) {
-            self.current_time += rl.getFrameTime();
+            self.current_time += frametime;
             if (self.current_time >= self.duration) {
                 self.finished = true;
             }
