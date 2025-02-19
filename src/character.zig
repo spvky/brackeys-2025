@@ -107,6 +107,7 @@ pub const Guard = struct {
     turning_timer: Timer = Timer.init(0.75),
     // Chase behavior
     last_sighted: rl.Vector2 = .{ .x = 0, .y = 0 },
+    animation_t: f32 = 0,
 
     const Self = @This();
 
@@ -159,6 +160,7 @@ pub const Guard = struct {
             .chase => {},
         }
         self.apply_velocity();
+        self.animation_t += frametime;
     }
 
     pub fn check_player_spotted(self: *Self, player: Character, occlusions: []rl.Rectangle) void {
@@ -218,11 +220,17 @@ pub const Guard = struct {
     }
 
     pub fn draw(self: Self, camera_offset: rl.Vector2) void {
-        const camera_pos = self.position.subtract(camera_offset);
+        const pos_on_camera = self.position.subtract(camera_offset);
         const vt = self.vision_triangle();
         const tvt = [3]rl.Vector2{ vt[0].subtract(camera_offset), vt[1].subtract(camera_offset), vt[2].subtract(camera_offset) };
         rl.drawTriangle(tvt[2], tvt[1], tvt[0], rl.Color.yellow.alpha(0.6));
-        rl.drawCircleV(camera_pos, self.radius, rl.Color.red);
+
+        const rotation_degrees = std.math.atan2(self.facing.y, self.facing.x) * (180.0 / std.math.pi);
+        rl.drawRectanglePro(.{ .x = pos_on_camera.x, .y = pos_on_camera.y, .height = 8, .width = 8 }, .{ .x = 4, .y = 4 }, rotation_degrees, rl.Color.red);
+
+        const t = @abs(std.math.cos(self.animation_t * 18 * self.velocity.length()));
+        // draw head
+        rl.drawRectanglePro(.{ .x = pos_on_camera.x, .y = pos_on_camera.y, .height = 4, .width = 4 }, .{ .x = 2 - t * 2, .y = 2 }, rotation_degrees, rl.Color.black);
     }
 };
 

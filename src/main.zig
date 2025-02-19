@@ -29,9 +29,29 @@ const State = struct {
     camera: Camera,
     level: Level,
     particles: std.ArrayList(Particle),
-    particle_timer: f32 = 0,
     frame_count: u32 = 0,
 };
+
+/// spawns a particle every 'rate' frames. rate does not need to be comptime but i think it makes it more clear if we treat it as if it is
+fn try_spawning_particle(state: *State, base_position: rl.Vector2, base_velocity: rl.Vector2, comptime rate: u8) !void {
+    if (state.frame_count % rate == 0) {
+        var velocity = base_velocity.scale(-0.1);
+
+        const f: f32 = @floatFromInt(state.frame_count);
+        velocity.x += std.math.sin(f) / 20;
+        velocity.y += std.math.sin(f) / 20;
+        const position: rl.Vector2 = .{
+            .x = base_position.x + std.math.sin(f),
+            .y = base_position.y + std.math.sin(f),
+        };
+        try state.particles.append(.{
+            .rect = .{ .x = position.x, .y = position.y, .width = 2, .height = 2 },
+            .color = rl.Color.ray_white,
+            .ttl = 0.15,
+            .velocity = velocity.normalize(),
+        });
+    }
+}
 
 pub fn main() !void {
     rl.setConfigFlags(.{ .window_resizable = true });
@@ -81,28 +101,16 @@ pub fn main() !void {
         state.camera.update();
         player.update(state.level.collisions, frametime);
         if (player.velocity.length() > 0) {
-            if (state.particle_timer == 0) {
-                var velocity = player.velocity.scale(-0.1);
+            try try_spawning_particle(&state, player.position, player.velocity, 10);
+        }
 
-                const f: f32 = @floatFromInt(state.frame_count);
-                velocity.x += std.math.sin(f) / 20;
-                velocity.y += std.math.sin(f) / 20;
-                const position: rl.Vector2 = .{
-                    .x = player.position.x + std.math.sin(f),
-                    .y = player.position.y + std.math.sin(f),
-                };
-                try state.particles.append(.{
-                    .rect = .{ .x = position.x, .y = position.y, .width = 2, .height = 2 },
-                    .color = rl.Color.ray_white,
-                    .ttl = 0.15,
-                    .velocity = velocity.normalize(),
-                });
-
-                state.particle_timer = 0.12;
+        for (state.level.guards) |*g| {
+            g.update(player, state.level.collisions, frametime);
+            if (g.velocity.length() > 0) {
+                try try_spawning_particle(&state, g.position, g.velocity, 20);
             }
         }
 
-        state.particle_timer = @max(state.particle_timer - frametime, 0);
         var i: usize = state.particles.items.len;
         while (i > 0) {
             i -= 1;
@@ -110,7 +118,7 @@ pub fn main() !void {
 
             particle.ttl = @max(particle.ttl - frametime, 0);
             if (particle.ttl == 0) {
-                _ = state.particles.swapRemove(i);
+                _ = state.particles.orderedRemove(i);
             }
 
             particle.rect.x += particle.velocity.x;
@@ -121,10 +129,6 @@ pub fn main() !void {
             // this means that it will step-wise interpolate from 1> -> 255, to 0 -> 0.
             // but our particles live for a very short time so we can accelerate by 30 times.
             particle.color.a = @as(u8, @min(255, @as(u64, @intFromFloat(particle.ttl * 255 * 30))));
-        }
-
-        for (state.level.guards) |*g| {
-            g.update(player, state.level.collisions, frametime);
         }
 
         rl.setShaderValue(shader, player_pos_loc, &state.camera.get_pos_on_camera(player.position), .vec2);
