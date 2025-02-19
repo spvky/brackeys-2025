@@ -4,11 +4,14 @@ const util = @import("utils.zig");
 
 pub const Character = struct {
     position: rl.Vector2,
-    speed: f32 = 150,
+    speed: f32 = 80,
     radius: f32 = 4,
     collision_detected: bool = false,
     velocity: rl.Vector2 = .{ .x = 0, .y = 0 },
+    facing: rl.Vector2 = .{ .x = 0, .y = 1 },
     color: rl.Color = rl.Color.sky_blue,
+
+    animation_t: f32 = 0,
 
     const Self = @This();
 
@@ -37,15 +40,17 @@ pub const Character = struct {
         velo_normalized.x *= (self.speed * rl.getFrameTime());
         velo_normalized.y *= (self.speed * rl.getFrameTime());
         self.velocity = velo_normalized;
+        if (self.velocity.length() > 0) self.facing = self.velocity;
     }
 
-    pub fn update(self: *Self, collisions: []rl.Rectangle) void {
+    pub fn update(self: *Self, collisions: []rl.Rectangle, frametime: f32) void {
         self.calculate_velocity();
         for (collisions) |collision| {
             self.collision_check(collision);
         }
 
         self.update_position();
+        self.animation_t += frametime;
     }
 
     pub fn update_position(self: *Self) void {
@@ -71,7 +76,7 @@ pub const Character = struct {
 
     pub fn debug_player(self: Self) !void {
         var buf: [1000]u8 = undefined;
-        const output = try std.fmt.bufPrintZ(&buf, "Velocity: [{d:.2},{d:.2}]\nPosition: [{d:.2},{d:.2}]\nCollision Check: {}", .{ self.velocity.x, self.velocity.y, self.position.x, self.position.y, self.collision_detected });
+        const output = try std.fmt.bufPrintZ(&buf, "Velocity: [{d:.2},{d:.2}]\nPosition: [{d:.2},{d:.2}]\nCollision Check: {}\nFacing: [{d:.2}, {d:.2}]", .{ self.velocity.x, self.velocity.y, self.position.x, self.position.y, self.collision_detected, self.facing.x, self.facing.y });
         rl.drawText(output, 2, 50, 24, rl.Color.dark_blue);
     }
 
@@ -80,12 +85,20 @@ pub const Character = struct {
     }
 
     pub fn draw(self: Self, camera_offset: rl.Vector2, show_velocity: bool) void {
-        const camera_pos = self.position.subtract(camera_offset);
+        const pos_on_camera = self.position.subtract(camera_offset);
         if (show_velocity) {
             const velocity_pos = self.projected_position().subtract(camera_offset);
             rl.drawCircleV(velocity_pos, self.radius, rl.Color.ray_white);
         }
-        rl.drawCircleV(camera_pos, self.radius, self.color);
+
+        const rotation_degrees = std.math.atan2(self.facing.y, self.facing.x) * (180.0 / std.math.pi);
+        rl.drawRectanglePro(.{ .x = pos_on_camera.x, .y = pos_on_camera.y, .height = 8, .width = 8 }, .{ .x = 4, .y = 4 }, rotation_degrees, self.color);
+
+        // NOTE: if we don't take the abs value of the head, it will go 'faaar' back. It looks cool! but not the way we usually walk...
+        // probably fits well if we are 'sneaking' or 'crouching' or something
+        const t = @abs(std.math.cos(self.animation_t * 15 * self.velocity.length()));
+        // draw head
+        rl.drawRectanglePro(.{ .x = pos_on_camera.x, .y = pos_on_camera.y, .height = 4, .width = 4 }, .{ .x = 2 - t * 2, .y = 2 }, rotation_degrees, rl.Color.black);
     }
 };
 

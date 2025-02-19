@@ -68,7 +68,7 @@ pub fn main() !void {
 
         state.camera.set_target(target_pos, level_bounds);
         state.camera.update();
-        player.update(state.level.collisions);
+        player.update(state.level.collisions, frametime);
         for (state.level.guards) |*g| {
             g.update(player, state.level.collisions, frametime);
         }
