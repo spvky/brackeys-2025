@@ -3,12 +3,13 @@ const rl = @import("raylib");
 const character = @import("character.zig");
 const Ldtk = @import("ldtk.zig").Ldtk;
 const Path = @import("path.zig").Path;
+const ItemPickup = @import("items.zig").ItemPickup;
 
 const WINDOW_WIDTH: i32 = 1080;
 const WINDOW_HEIGHT: i32 = 720;
 
 const RENDER_WIDTH: i32 = 240;
-const RENDER_HEIGHT: i32 = 180;
+const RENDER_HEIGHT: i32 = 160;
 const TITLE = "brackeys 2025";
 
 const Particle = struct {
@@ -95,7 +96,12 @@ pub fn main() !void {
 
         state.camera.set_target(target_pos, level_bounds);
         state.camera.update();
-        player.update(state.level.collisions, frametime);
+
+        const raw_cursor_position = rl.getMousePosition();
+        const render_ratio: f32 = @as(f32, @floatFromInt(RENDER_WIDTH)) / @as(f32, @floatFromInt(WINDOW_WIDTH));
+        const cursor_pos = raw_cursor_position.scale(render_ratio).add(state.camera.offset);
+
+        player.update(state.level.collisions, frametime, cursor_pos);
         if (player.velocity.length() > 0) {
             try try_spawning_particle(&state, player.position, player.velocity, 10);
         }
@@ -161,9 +167,14 @@ pub fn main() !void {
 
         player.draw(state.camera.offset, false);
         // Need to draw him normal style
-        for (state.level.guards) |g| {
-            g.draw(state.camera.offset);
+        for (state.level.guards) |guard| {
+            guard.draw(state.camera.offset);
         }
+
+        for (state.level.items) |item| {
+            item.draw(state.camera.offset);
+        }
+
         path.draw_debug_lines(state.camera.offset, rl.Color.gold);
         state.scene.end();
 
@@ -246,6 +257,7 @@ const Level = struct {
     collisions: []rl.Rectangle,
     guards: []character.Guard,
     player: character.Player,
+    items: []ItemPickup,
     navigation_maps: [][][]bool,
 
     pub fn init(allocator: std.mem.Allocator) !Level {
@@ -253,6 +265,7 @@ const Level = struct {
         const ldtk = try Ldtk.init("assets/sample.ldtk");
         var collisions = std.ArrayList(rl.Rectangle).init(allocator);
         var guards = std.ArrayList(character.Guard).init(allocator);
+        var items = std.ArrayList(ItemPickup).init(allocator);
         var navigation_maps = std.ArrayList([][]bool).init(allocator);
 
         const tile_width = 8;
@@ -285,6 +298,8 @@ const Level = struct {
                     for (instance.entityInstances) |e| {
                         const is_guard = std.mem.eql(u8, e.__identifier, "Guard");
                         const is_player = std.mem.eql(u8, e.__identifier, "Player");
+                        const is_rock = std.mem.eql(u8, e.__identifier, "Rock");
+
                         if (is_guard) {
                             const position: rl.Vector2 = .{ .x = @floatFromInt(e.px[0]), .y = @floatFromInt(e.px[1]) };
                             var patrol_path = std.ArrayList(rl.Vector2).init(allocator);
@@ -296,6 +311,11 @@ const Level = struct {
                         if (is_player) {
                             const position: rl.Vector2 = .{ .x = @floatFromInt(e.px[0]), .y = @floatFromInt(e.px[1]) };
                             player = character.Player.init(position);
+                        }
+
+                        if (is_rock) {
+                            const position: rl.Vector2 = .{ .x = @floatFromInt(e.px[0]), .y = @floatFromInt(e.px[1]) };
+                            try items.append(.{ .item_type = .rock, .position = position });
                         }
                     }
                 }
@@ -316,6 +336,7 @@ const Level = struct {
             .invisible = try rl.loadTexture("assets/invisible.png"),
             .collisions = try collisions.toOwnedSlice(),
             .guards = try guards.toOwnedSlice(),
+            .items = try items.toOwnedSlice(),
             .player = player,
             .navigation_maps = try navigation_maps.toOwnedSlice(),
         };
