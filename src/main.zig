@@ -4,6 +4,7 @@ const character = @import("character.zig");
 const Ldtk = @import("ldtk.zig").Ldtk;
 const Path = @import("path.zig").Path;
 const ItemPickup = @import("items.zig").ItemPickup;
+const transitions = @import("transition.zig");
 
 var WINDOW_WIDTH: i32 = 1080;
 var WINDOW_HEIGHT: i32 = 720;
@@ -67,6 +68,9 @@ pub fn main() !void {
 
     rl.setWindowSize(WINDOW_WIDTH, WINDOW_WIDTH);
 
+    var diamond = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT);
+    var clicked_portal: ?Portal = null;
+
     rl.setTargetFPS(60);
 
     var state: State = .{
@@ -88,6 +92,9 @@ pub fn main() !void {
     const occlusion_mask_loc = rl.getShaderLocation(shader, "occlusion");
     const player_pos_loc = rl.getShaderLocation(shader, "player_pos");
     const invisible_scene_loc = rl.getShaderLocation(shader, "invisible_scene");
+
+    // start the 'intro' transission
+    diamond.start(null, state.render_texture.texture);
 
     rl.setShaderValue(shader, size_loc, &rl.Vector2{ .x = RENDER_WIDTH, .y = RENDER_HEIGHT }, .vec2);
     while (!rl.windowShouldClose()) {
@@ -153,17 +160,34 @@ pub fn main() !void {
             var iter = state.level.portals.valueIterator();
             while (iter.next()) |portal| {
                 if (portal.position.distance(player.position) <= 32) {
-                    const new_portal = state.level.use_portal(portal.*);
-                    player.position = new_portal.position.add(.{
-                        .x = @floatFromInt(new_portal.width / 2),
-                        .y = @floatFromInt(new_portal.height / 2),
-                    });
-                    state.level_index = new_portal.level;
-
-                    // do something with the camera here
+                    // start the 'fade out' transition
+                    diamond.start(state.render_texture.texture, null);
+                    clicked_portal = portal.*;
                 }
             }
         }
+
+        if (clicked_portal) |portal| {
+            if (diamond.progress == 1) {
+                const new_portal = state.level.use_portal(portal);
+                player.position = new_portal.position.add(.{
+                    .x = @floatFromInt(new_portal.width / 2),
+                    .y = @floatFromInt(new_portal.height / 2),
+                });
+                state.level_index = new_portal.level;
+                clicked_portal = null;
+                // start the 'fade in' transition
+                diamond.start(null, state.render_texture.texture);
+
+                const lvl = state.level.ldtk.levels[state.level_index];
+                state.camera.offset = .{
+                    .x = @floatFromInt(lvl.worldX),
+                    .y = @floatFromInt(lvl.worldY),
+                };
+            }
+        }
+
+        diamond.update(frametime);
 
         // clearing occlusion mask
         state.occlusion_mask.begin();
@@ -224,6 +248,8 @@ pub fn main() !void {
         // we draw the scene onto the final render_texture with our shader
         state.scene.texture.draw(0, 0, rl.Color.white);
         shader.deactivate();
+
+        diamond.draw();
         state.render_texture.end();
 
         rl.beginDrawing();
