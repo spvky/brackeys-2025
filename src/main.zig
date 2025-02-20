@@ -4,6 +4,7 @@ const character = @import("character.zig");
 const Ldtk = @import("ldtk.zig").Ldtk;
 const Path = @import("path.zig").Path;
 const ItemPickup = @import("items.zig").ItemPickup;
+const transitions = @import("transition.zig");
 
 var WINDOW_WIDTH: i32 = 1080;
 var WINDOW_HEIGHT: i32 = 720;
@@ -32,6 +33,8 @@ const State = struct {
     level: Level,
     particles: std.ArrayList(Particle),
     frame_count: u32 = 0,
+
+    level_index: usize = 0,
 };
 
 /// spawns a particle every 'rate' frames. rate does not need to be comptime but i think it makes it more clear if we treat it as if it is
@@ -65,6 +68,9 @@ pub fn main() !void {
 
     rl.setWindowSize(WINDOW_WIDTH, WINDOW_WIDTH);
 
+    var diamond = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT);
+    var clicked_portal: ?Portal = null;
+
     rl.setTargetFPS(60);
 
     var state: State = .{
@@ -87,12 +93,15 @@ pub fn main() !void {
     const player_pos_loc = rl.getShaderLocation(shader, "player_pos");
     const invisible_scene_loc = rl.getShaderLocation(shader, "invisible_scene");
 
+    // start the 'intro' transission
+    diamond.start(null, state.render_texture.texture);
+
     rl.setShaderValue(shader, size_loc, &rl.Vector2{ .x = RENDER_WIDTH, .y = RENDER_HEIGHT }, .vec2);
     while (!rl.windowShouldClose()) {
         var player = &state.level.player;
         const target_pos = player.position.subtract(.{ .x = RENDER_WIDTH / 2, .y = RENDER_HEIGHT / 2 });
         const frametime = rl.getFrameTime();
-        var level_bounds = state.level.get_bounds(0);
+        var level_bounds = state.level.get_bounds(state.level_index);
         level_bounds.width -= RENDER_WIDTH;
         level_bounds.height -= RENDER_HEIGHT;
 
@@ -103,13 +112,18 @@ pub fn main() !void {
         const render_ratio: f32 = @as(f32, @floatFromInt(RENDER_WIDTH)) / @as(f32, @floatFromInt(WINDOW_WIDTH));
         const cursor_pos = raw_cursor_position.scale(render_ratio).add(state.camera.offset);
 
-        player.update(state.level.collisions, frametime, cursor_pos);
+        player.update(state.level.collisions[state.level_index], frametime, cursor_pos);
         if (player.velocity.length() > 0) {
             try try_spawning_particle(&state, player.position, player.velocity, 10);
         }
 
-        for (state.level.guards) |*g| {
-            g.update(player.*, state.level.collisions, state.level.navigation_maps[0], frametime);
+        for (state.level.guards[state.level_index]) |*g| {
+            const lvl = state.level.ldtk.levels[state.level_index];
+            const level_offset: rl.Vector2 = .{
+                .x = @floatFromInt(lvl.worldX),
+                .y = @floatFromInt(lvl.worldY),
+            };
+            g.update(player.*, state.level.collisions[state.level_index], state.level.navigation_maps[state.level_index], level_offset, frametime);
             if (g.velocity.length() > 0) {
                 try try_spawning_particle(&state, g.position, g.velocity, 20);
             }
@@ -137,6 +151,44 @@ pub fn main() !void {
 
         rl.setShaderValue(shader, player_pos_loc, &state.camera.get_pos_on_camera(player.position), .vec2);
 
+        // PSEUDO-CODE for testing portals
+        // in reality the portal is a 'rectangle' so we should collision check instead of this.
+        // we should also give some feedback that the player can interact with this 'portal'.
+        //
+        // a button, widget, a feint glow or something.
+        if (rl.isKeyPressed(.e)) {
+            var iter = state.level.portals.valueIterator();
+            while (iter.next()) |portal| {
+                if (portal.position.distance(player.position) <= 32) {
+                    // start the 'fade out' transition
+                    diamond.start(state.render_texture.texture, null);
+                    clicked_portal = portal.*;
+                }
+            }
+        }
+
+        if (clicked_portal) |portal| {
+            if (diamond.progress == 1) {
+                const new_portal = state.level.use_portal(portal);
+                player.position = new_portal.position.add(.{
+                    .x = @floatFromInt(new_portal.width / 2),
+                    .y = @floatFromInt(new_portal.height / 2),
+                });
+                state.level_index = new_portal.level;
+                clicked_portal = null;
+                // start the 'fade in' transition
+                diamond.start(null, state.render_texture.texture);
+
+                const lvl = state.level.ldtk.levels[state.level_index];
+                state.camera.offset = .{
+                    .x = @floatFromInt(lvl.worldX),
+                    .y = @floatFromInt(lvl.worldY),
+                };
+            }
+        }
+
+        diamond.update(frametime);
+
         // clearing occlusion mask
         state.occlusion_mask.begin();
         rl.clearBackground(rl.Color.white);
@@ -147,15 +199,9 @@ pub fn main() !void {
         rl.clearBackground(rl.Color.white);
         state.scene.end();
 
-        state.level.draw(
-            state.camera,
-            state.scene,
-            state.invisible_scene,
-            state.occlusion_mask,
-        );
-
         state.scene.begin();
         //NOTE: We should draw everything into the scene, and let the shader compose into the render_texture later
+        state.level.draw_visible(state.camera, state.level_index);
         for (state.particles.items) |particle| {
             var rect = particle.rect;
             rect.x -= state.camera.offset.x;
@@ -165,21 +211,35 @@ pub fn main() !void {
 
         player.draw(state.camera.offset, false);
         // Need to draw him normal style
-        for (state.level.guards) |guard| {
+        for (state.level.guards[state.level_index]) |guard| {
             guard.draw(state.camera.offset);
+            if (guard.state == .chase) {
+                const lvl = state.level.ldtk.levels[state.level_index];
+                const level_offset: rl.Vector2 = .{
+                    .x = @floatFromInt(lvl.worldX),
+                    .y = @floatFromInt(lvl.worldY),
+                };
+                const total_offset = state.camera.offset.subtract(level_offset);
+                guard.chase_path.draw_debug_lines(total_offset, rl.Color.red);
+            }
         }
 
-        for (state.level.items) |item| {
+        for (state.level.items[state.level_index]) |item| {
             item.draw(state.camera.offset);
         }
 
         state.scene.end();
 
         state.invisible_scene.begin();
-        for (state.level.guards) |g| {
+        state.level.draw_invisible(state.camera, state.level_index);
+        for (state.level.guards[state.level_index]) |g| {
             g.draw_intuition(state.camera.offset);
         }
         state.invisible_scene.end();
+
+        state.occlusion_mask.begin();
+        state.level.draw_occlusion(state.camera, state.level_index);
+        state.occlusion_mask.end();
 
         state.render_texture.begin();
         shader.activate();
@@ -188,6 +248,8 @@ pub fn main() !void {
         // we draw the scene onto the final render_texture with our shader
         state.scene.texture.draw(0, 0, rl.Color.white);
         shader.deactivate();
+
+        diamond.draw();
         state.render_texture.end();
 
         rl.beginDrawing();
@@ -253,27 +315,48 @@ const Camera = struct {
     }
 };
 
+const Portal = struct {
+    position: rl.Vector2,
+    width: u32,
+    height: u32,
+    other: []const u8,
+    level: usize,
+};
+
 const Level = struct {
-    ldtk: Ldtk,
     invisible: rl.Texture,
     visible: rl.Texture,
-    collisions: []rl.Rectangle,
-    guards: []character.Guard,
+    ldtk: Ldtk,
     player: character.Player,
-    items: []ItemPickup,
+    // [level][]rl.Rectangle
+    collisions: [][]rl.Rectangle,
+    // [level][]character.Guard
+    guards: [][]character.Guard,
+    // [level][]ItemPickup
+    items: [][]ItemPickup,
+    // [level][y][x]bool
     navigation_maps: [][][]bool,
+
+    // [Iid]
+    portals: std.StringHashMap(Portal),
 
     pub fn init(allocator: std.mem.Allocator) !Level {
         var player: character.Player = undefined;
         const ldtk = try Ldtk.init("assets/sample.ldtk");
-        var collisions = std.ArrayList(rl.Rectangle).init(allocator);
-        var guards = std.ArrayList(character.Guard).init(allocator);
-        var items = std.ArrayList(ItemPickup).init(allocator);
+        var collisions = std.ArrayList([]rl.Rectangle).init(allocator);
+        var guards = std.ArrayList([]character.Guard).init(allocator);
+        var items = std.ArrayList([]ItemPickup).init(allocator);
         var navigation_maps = std.ArrayList([][]bool).init(allocator);
+
+        //TODO: REFACTOR
+        var portals = std.StringHashMap(Portal).init(allocator);
 
         const tile_width = 8;
 
-        for (ldtk.levels) |level| {
+        for (ldtk.levels, 0..) |level, level_index| {
+            var level_collisions = std.ArrayList(rl.Rectangle).init(allocator);
+            var level_guards = std.ArrayList(character.Guard).init(allocator);
+            var level_items = std.ArrayList(ItemPickup).init(allocator);
             var navigation_map = std.ArrayList([]bool).init(allocator);
             for (0..@divTrunc(level.pxHei, tile_width)) |_| {
                 var row = try std.ArrayList(bool).initCapacity(allocator, @divTrunc(level.pxWid, tile_width));
@@ -294,41 +377,60 @@ const Level = struct {
                             const y: i32 = @divFloor(i32_index, instance.__cWid);
                             const x: i32 = @mod(i32_index, instance.__cWid);
                             const tile_world_pos: rl.Vector2 = .{
-                                .x = @floatFromInt((x * 8) + instance.__pxTotalOffsetX + level.worldX),
-                                .y = @floatFromInt((y * 8) + instance.__pxTotalOffsetY + level.worldY),
+                                .x = @floatFromInt((x * tile_width) + instance.__pxTotalOffsetX + level.worldX),
+                                .y = @floatFromInt((y * tile_width) + instance.__pxTotalOffsetY + level.worldY),
                             };
-                            try collisions.append(.{ .x = tile_world_pos.x, .y = tile_world_pos.y, .height = 8, .width = 8 });
+                            try level_collisions.append(.{ .x = tile_world_pos.x, .y = tile_world_pos.y, .height = tile_width, .width = tile_width });
                         }
                     }
                 }
 
                 if (is_entities) {
                     for (instance.entityInstances) |e| {
-                        const is_guard = std.mem.eql(u8, e.__identifier, "Guard");
-                        const is_player = std.mem.eql(u8, e.__identifier, "Player");
-                        const is_rock = std.mem.eql(u8, e.__identifier, "Rock");
+                        const Case = enum {
+                            Guard,
+                            Player,
+                            Rock,
+                            Portal,
+                        };
+                        const case = std.meta.stringToEnum(Case, e.__identifier) orelse unreachable;
 
-                        if (is_guard) {
-                            const position: rl.Vector2 = .{ .x = @floatFromInt(e.px[0]), .y = @floatFromInt(e.px[1]) };
-                            var patrol_path = std.ArrayList(rl.Vector2).init(allocator);
-                            for (e.fieldInstances[0].__value) |v| {
-                                try patrol_path.append(rl.Vector2{ .x = @floatFromInt(v.cx * 16), .y = @floatFromInt(v.cy * 16) });
-                            }
-                            try guards.append(try character.Guard.init(allocator, position, try patrol_path.toOwnedSlice()));
-                        }
-                        if (is_player) {
-                            const position: rl.Vector2 = .{ .x = @floatFromInt(e.px[0]), .y = @floatFromInt(e.px[1]) };
-                            player = character.Player.init(position);
-                        }
-
-                        if (is_rock) {
-                            const position: rl.Vector2 = .{ .x = @floatFromInt(e.px[0]), .y = @floatFromInt(e.px[1]) };
-                            try items.append(.{ .item_type = .rock, .position = position });
+                        const position: rl.Vector2 = .{
+                            .x = @floatFromInt(e.px[0] + instance.__pxTotalOffsetX + level.worldX),
+                            .y = @floatFromInt(e.px[1] + instance.__pxTotalOffsetY + level.worldY),
+                        };
+                        switch (case) {
+                            .Guard => {
+                                var patrol_path = std.ArrayList(rl.Vector2).init(allocator);
+                                const field_instance_value = try e.fieldInstances[0].parse_value();
+                                for (field_instance_value.points) |v| {
+                                    const offset_x = instance.__pxTotalOffsetX + level.worldX;
+                                    const offset_y = instance.__pxTotalOffsetY + level.worldY;
+                                    try patrol_path.append(rl.Vector2{ .x = @floatFromInt(v.cx * tile_width + offset_x), .y = @floatFromInt(v.cy * tile_width + offset_y) });
+                                }
+                                try level_guards.append(try character.Guard.init(allocator, position, try patrol_path.toOwnedSlice()));
+                            },
+                            .Player => {
+                                player = character.Player.init(position);
+                            },
+                            .Rock => {
+                                try level_items.append(.{ .item_type = .rock, .position = position });
+                            },
+                            .Portal => {
+                                const field_instance_value = try e.fieldInstances[0].parse_value();
+                                try portals.put(e.iid, .{
+                                    .position = position,
+                                    .other = field_instance_value.entity_ref.entityIid,
+                                    .width = e.width,
+                                    .height = e.height,
+                                    .level = level_index, // naive
+                                });
+                            },
                         }
                     }
                 }
             }
-            for (collisions.items) |collision| {
+            for (level_collisions.items) |collision| {
                 const x: usize = @intFromFloat(@divTrunc(collision.x - @as(f32, @floatFromInt(level.worldX)), tile_width));
                 const y: usize = @intFromFloat(@divTrunc(collision.y - @as(f32, @floatFromInt(level.worldY)), tile_width));
 
@@ -336,6 +438,9 @@ const Level = struct {
             }
 
             try navigation_maps.append(try navigation_map.toOwnedSlice());
+            try collisions.append(try level_collisions.toOwnedSlice());
+            try guards.append(try level_guards.toOwnedSlice());
+            try items.append(try level_items.toOwnedSlice());
         }
 
         return .{
@@ -347,72 +452,76 @@ const Level = struct {
             .items = try items.toOwnedSlice(),
             .player = player,
             .navigation_maps = try navigation_maps.toOwnedSlice(),
+            .portals = portals,
         };
     }
 
-    /// at the moment this does not comply with the same rules as other objects. This does not get declaratively called within a pre-configured context.
-    /// Instead this is expecte to be called outside of all contexts' and instead control the context shift itself.
-    /// However, this should probably be changed in the future.
-    /// By being split up into several methods. 'Draw occlusion', 'draw visible/invisible'
-    pub fn draw(self: @This(), camera: Camera, scene: rl.RenderTexture, invisible_scene: rl.RenderTexture, occlusion_mask: rl.RenderTexture) void {
+    /// returns the linked portal
+    pub fn use_portal(self: @This(), portal: Portal) Portal {
+        return self.portals.get(portal.other) orelse unreachable;
+    }
+
+    fn draw_level(self: @This(), camera: Camera, level: usize, tilesheet: rl.Texture) void {
         const tile_width = 8;
-        for (self.ldtk.levels) |level| {
-            var i = level.layerInstances.len;
-            while (i > 0) {
-                i -= 1;
-                const instance = level.layerInstances[i];
+        const ldtk_level = self.ldtk.levels[level];
+        var i = ldtk_level.layerInstances.len;
+        while (i > 0) {
+            i -= 1;
+            const instance = ldtk_level.layerInstances[i];
 
-                scene.begin();
-                for (instance.autoLayerTiles) |tile| {
-                    // 'coercing' error into null, so that we can easily null-check for ease of use.
-                    // might indicate that we want bound_check to return null instead of error type hm...
-                    const tile_world_pos: rl.Vector2 = .{
-                        .x = @floatFromInt(tile.px[0] + instance.__pxTotalOffsetX + level.worldX),
-                        .y = @floatFromInt(tile.px[1] + instance.__pxTotalOffsetY + level.worldY),
-                    };
-                    if (camera.bound_check(tile_world_pos) catch null) |camera_pos| {
-                        const flip_x = (tile.f == 1 or tile.f == 3);
-                        const flip_y = (tile.f == 2 or tile.f == 3);
-                        rl.drawTexturePro(
-                            self.visible,
-                            .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
-                            .{ .x = camera_pos.x, .y = camera_pos.y, .width = tile_width, .height = tile_width },
-                            rl.Vector2.zero(),
-                            0,
-                            rl.Color.white,
-                        );
-                    }
+            for (instance.autoLayerTiles) |tile| {
+                // 'coercing' error into null, so that we can easily null-check for ease of use.
+                // might indicate that we want bound_check to return null instead of error type hm...
+                const tile_world_pos: rl.Vector2 = .{
+                    .x = @floatFromInt(tile.px[0] + instance.__pxTotalOffsetX + ldtk_level.worldX),
+                    .y = @floatFromInt(tile.px[1] + instance.__pxTotalOffsetY + ldtk_level.worldY),
+                };
+                if (camera.bound_check(tile_world_pos) catch null) |camera_pos| {
+                    const flip_x = (tile.f == 1 or tile.f == 3);
+                    const flip_y = (tile.f == 2 or tile.f == 3);
+                    rl.drawTexturePro(
+                        tilesheet,
+                        .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
+                        .{ .x = camera_pos.x, .y = camera_pos.y, .width = tile_width, .height = tile_width },
+                        rl.Vector2.zero(),
+                        0,
+                        rl.Color.white,
+                    );
                 }
-                scene.end();
+            }
+            for (instance.gridTiles) |tile| {
+                const tile_world_pos: rl.Vector2 = .{
+                    .x = @floatFromInt(tile.px[0] + instance.__pxTotalOffsetX + ldtk_level.worldX),
+                    .y = @floatFromInt(tile.px[1] + instance.__pxTotalOffsetY + ldtk_level.worldY),
+                };
+                if (camera.bound_check(tile_world_pos) catch null) |camera_pos| {
+                    const flip_x = (tile.f == 1 or tile.f == 3);
+                    const flip_y = (tile.f == 2 or tile.f == 3);
+                    rl.drawTexturePro(
+                        tilesheet,
+                        .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
+                        .{ .x = camera_pos.x, .y = camera_pos.y, .width = tile_width, .height = tile_width },
+                        rl.Vector2.zero(),
+                        0,
+                        rl.Color.white,
+                    );
+                }
+            }
+        }
+    }
 
-                invisible_scene.begin();
-                for (instance.autoLayerTiles) |tile| {
-                    const tile_world_pos: rl.Vector2 = .{
-                        .x = @floatFromInt(tile.px[0] + instance.__pxTotalOffsetX + level.worldX),
-                        .y = @floatFromInt(tile.px[1] + instance.__pxTotalOffsetY + level.worldY),
-                    };
-                    if (camera.bound_check(tile_world_pos) catch null) |camera_pos| {
-                        const flip_x = (tile.f == 1 or tile.f == 3);
-                        const flip_y = (tile.f == 2 or tile.f == 3);
-                        rl.drawTexturePro(
-                            self.invisible,
-                            .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
-                            .{ .x = camera_pos.x, .y = camera_pos.y, .width = tile_width, .height = tile_width },
-                            rl.Vector2.zero(),
-                            0,
-                            rl.Color.white,
-                        );
-                    }
-                }
-                invisible_scene.end();
+    pub fn draw_visible(self: @This(), camera: Camera, level: usize) void {
+        self.draw_level(camera, level, self.visible);
+    }
 
-                occlusion_mask.begin();
-                for (self.collisions) |collision| {
-                    if (camera.bound_check(.{ .x = collision.x, .y = collision.y }) catch null) |camera_pos| {
-                        rl.drawRectangleRec(.{ .x = camera_pos.x, .y = camera_pos.y, .width = collision.width, .height = collision.width }, rl.Color.black);
-                    }
-                }
-                occlusion_mask.end();
+    pub fn draw_invisible(self: @This(), camera: Camera, level: usize) void {
+        self.draw_level(camera, level, self.invisible);
+    }
+
+    pub fn draw_occlusion(self: @This(), camera: Camera, level: usize) void {
+        for (self.collisions[level]) |collision| {
+            if (camera.bound_check(.{ .x = collision.x, .y = collision.y }) catch null) |camera_pos| {
+                rl.drawRectangleRec(.{ .x = camera_pos.x, .y = camera_pos.y, .width = collision.width, .height = collision.width }, rl.Color.black);
             }
         }
     }
