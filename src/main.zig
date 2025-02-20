@@ -285,15 +285,20 @@ const Level = struct {
             while (i > 0) {
                 i -= 1;
                 const instance = level.layerInstances[i];
-                const is_wall = std.mem.eql(u8, instance.__identifier, "Walls");
+                const is_main_layer = std.mem.eql(u8, instance.__identifier, "Main");
                 const is_entities = std.mem.eql(u8, instance.__identifier, "Entities");
-                for (instance.autoLayerTiles) |tile| {
-                    const tile_world_pos: rl.Vector2 = .{
-                        .x = @floatFromInt(tile.px[0] + instance.__pxTotalOffsetX + level.worldX),
-                        .y = @floatFromInt(tile.px[1] + instance.__pxTotalOffsetY + level.worldY),
-                    };
-                    if (is_wall) {
-                        try collisions.append(.{ .x = tile_world_pos.x, .y = tile_world_pos.y, .height = 8, .width = 8 });
+                if (is_main_layer) {
+                    for (instance.intGridCsv, 0..) |id, index| {
+                        if (id == 2) {
+                            const i32_index: i32 = @as(i32, @intCast(index));
+                            const y: i32 = @divFloor(i32_index, instance.__cWid);
+                            const x: i32 = @mod(i32_index, instance.__cWid);
+                            const tile_world_pos: rl.Vector2 = .{
+                                .x = @floatFromInt((x * 8) + instance.__pxTotalOffsetX + level.worldX),
+                                .y = @floatFromInt((y * 8) + instance.__pxTotalOffsetY + level.worldY),
+                            };
+                            try collisions.append(.{ .x = tile_world_pos.x, .y = tile_world_pos.y, .height = 8, .width = 8 });
+                        }
                     }
                 }
 
@@ -356,7 +361,6 @@ const Level = struct {
             while (i > 0) {
                 i -= 1;
                 const instance = level.layerInstances[i];
-                const is_wall = std.mem.eql(u8, instance.__identifier, "Walls");
 
                 scene.begin();
                 for (instance.autoLayerTiles) |tile| {
@@ -403,15 +407,9 @@ const Level = struct {
                 invisible_scene.end();
 
                 occlusion_mask.begin();
-                for (instance.autoLayerTiles) |tile| {
-                    const tile_world_pos: rl.Vector2 = .{
-                        .x = @floatFromInt(tile.px[0] + instance.__pxTotalOffsetX + level.worldX),
-                        .y = @floatFromInt(tile.px[1] + instance.__pxTotalOffsetY + level.worldY),
-                    };
-                    if (is_wall) {
-                        if (camera.bound_check(tile_world_pos) catch null) |camera_pos| {
-                            rl.drawRectangleV(camera_pos, rl.Vector2.one().scale(tile_width), rl.Color.black);
-                        }
+                for (self.collisions) |collision| {
+                    if (camera.bound_check(.{ .x = collision.x, .y = collision.y }) catch null) |camera_pos| {
+                        rl.drawRectangleRec(.{ .x = camera_pos.x, .y = camera_pos.y, .width = collision.width, .height = collision.width }, rl.Color.black);
                     }
                 }
                 occlusion_mask.end();

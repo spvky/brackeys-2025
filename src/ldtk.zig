@@ -59,6 +59,8 @@ const LayerInstance = struct {
     __type: []const u8,
     __pxTotalOffsetX: i32,
     __pxTotalOffsetY: i32,
+    __cWid: i32,
+    __cHei: i32,
     intGridCsv: []i32,
     entityInstances: []EntityInstance,
     levelId: u32,
