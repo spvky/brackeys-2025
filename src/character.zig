@@ -1,16 +1,27 @@
 const std = @import("std");
 const rl = @import("raylib");
 const util = @import("utils.zig");
+const items = @import("items.zig");
+
+pub const PlayerActionState = enum {
+    normal,
+    throwing,
+};
 
 pub const Player = struct {
     position: rl.Vector2,
-    speed: f32 = 80,
+    base_speed: f32 = 80,
     radius: f32 = 4,
+    action_state: PlayerActionState = .normal,
+    min_throw_strength: f32 = 10,
+    max_throw_strength: f32 = 100,
+    current_throw_strength: f32 = 10,
+    throw_charge_timer: Timer = Timer.init(1.5),
+    held_item: items.Item = .rock,
     collision_detected: bool = false,
     velocity: rl.Vector2 = .{ .x = 0, .y = 0 },
     facing: rl.Vector2 = .{ .x = 0, .y = 1 },
     color: rl.Color = rl.Color.sky_blue,
-
     animation_t: f32 = 0,
 
     const Self = @This();
@@ -37,14 +48,40 @@ pub const Player = struct {
         }
 
         var velo_normalized = rl.math.vector2Normalize(.{ .x = x_vel, .y = y_vel });
-        velo_normalized.x *= (self.speed * frametime);
-        velo_normalized.y *= (self.speed * frametime);
+        velo_normalized.x *= (self.speed() * frametime);
+        velo_normalized.y *= (self.speed() * frametime);
         self.velocity = velo_normalized;
         if (self.velocity.length() > 0) self.facing = self.facing.lerp(self.velocity, frametime * 10);
     }
 
-    pub fn update(self: *Self, collisions: []rl.Rectangle, frametime: f32) void {
+    pub fn throw_strength(self: Self) f32 {
+        return std.math.lerp(self.min_throw_strength, self.max_throw_strength, self.throw_charge_timer.progress());
+    }
+
+    pub fn handle_action_state(self: *Self, frametime: f32) void {
+        if (rl.isMouseButtonDown(.left) and self.held_item.is_throwable()) {
+            self.action_state = .throwing;
+            self.throw_charge_timer.update(frametime);
+        } else {
+            self.action_state = .normal;
+            self.throw_charge_timer.reset();
+        }
+    }
+
+    pub fn speed(self: Self) f32 {
+        switch (self.action_state) {
+            .throwing => return self.base_speed * 0.5,
+            .normal => return self.base_speed,
+        }
+    }
+
+    pub fn charging_throw(self: Self) bool {
+        return .throwing == self.action_state and .none != self.held_item;
+    }
+
+    pub fn update(self: *Self, collisions: []rl.Rectangle, frametime: f32, cursor_position: rl.Vector2) void {
         self.calculate_velocity(frametime);
+        self.handle_action_state(frametime);
         for (collisions) |collision| {
             const projected = self.projected_position();
             if (rl.checkCollisionCircleRec(.{ .x = projected.x, .y = self.position.y }, self.radius * 0.5, collision)) {
@@ -57,7 +94,17 @@ pub const Player = struct {
         self.position.x += self.velocity.x;
         self.position.y += self.velocity.y;
 
-        self.animation_t += frametime;
+        if (self.charging_throw()) {
+            self.facing = cursor_position.subtract(self.position).normalize();
+        }
+
+        const adjusted_frametime = blk: {
+            switch (self.action_state) {
+                .throwing => break :blk 0.5 * frametime,
+                .normal => break :blk frametime,
+            }
+        };
+        self.animation_t += adjusted_frametime;
     }
 
     pub fn debug_player(self: Self) !void {
@@ -85,6 +132,10 @@ pub const Player = struct {
         const t = @abs(std.math.cos(self.animation_t * 15 * self.velocity.length()));
         // draw head
         rl.drawRectanglePro(.{ .x = pos_on_camera.x, .y = pos_on_camera.y, .height = 4, .width = 4 }, .{ .x = 2 - t * 2, .y = 2 }, rotation_degrees, rl.Color.black);
+        if (self.held_item != .none and self.action_state == .throwing) {
+            const end_point = self.position.add(self.facing.scale(self.throw_strength())).subtract(camera_offset);
+            rl.drawLineV(pos_on_camera, end_point, rl.Color.red);
+        }
     }
 };
 
@@ -252,6 +303,10 @@ pub const Timer = struct {
                 self.finished = true;
             }
         }
+    }
+
+    pub fn progress(self: Self) f32 {
+        return self.current_time / self.duration;
     }
 
     pub fn reset(self: *Self) void {
