@@ -147,15 +147,9 @@ pub fn main() !void {
         rl.clearBackground(rl.Color.white);
         state.scene.end();
 
-        state.level.draw(
-            state.camera,
-            state.scene,
-            state.invisible_scene,
-            state.occlusion_mask,
-        );
-
         state.scene.begin();
         //NOTE: We should draw everything into the scene, and let the shader compose into the render_texture later
+        state.level.draw_visible(state.camera, 0);
         for (state.particles.items) |particle| {
             var rect = particle.rect;
             rect.x -= state.camera.offset.x;
@@ -176,10 +170,15 @@ pub fn main() !void {
         state.scene.end();
 
         state.invisible_scene.begin();
+        state.level.draw_invisible(state.camera, 0);
         for (state.level.guards[0]) |g| {
             g.draw_intuition(state.camera.offset);
         }
         state.invisible_scene.end();
+
+        state.occlusion_mask.begin();
+        state.level.draw_occlusion(state.camera, 0);
+        state.occlusion_mask.end();
 
         state.render_texture.begin();
         shader.activate();
@@ -254,9 +253,9 @@ const Camera = struct {
 };
 
 const Level = struct {
-    ldtk: Ldtk,
     invisible: rl.Texture,
     visible: rl.Texture,
+    ldtk: Ldtk,
     player: character.Player,
     // [level][]rl.Rectangle
     collisions: [][]rl.Rectangle,
@@ -360,69 +359,49 @@ const Level = struct {
         };
     }
 
-    /// at the moment this does not comply with the same rules as other objects. This does not get declaratively called within a pre-configured context.
-    /// Instead this is expecte to be called outside of all contexts' and instead control the context shift itself.
-    /// However, this should probably be changed in the future.
-    /// By being split up into several methods. 'Draw occlusion', 'draw visible/invisible'
-    pub fn draw(self: @This(), camera: Camera, scene: rl.RenderTexture, invisible_scene: rl.RenderTexture, occlusion_mask: rl.RenderTexture) void {
+    fn draw_level(self: @This(), camera: Camera, level: usize, tilesheet: rl.Texture) void {
         const tile_width = 8;
-        for (self.ldtk.levels) |level| {
-            var i = level.layerInstances.len;
-            while (i > 0) {
-                i -= 1;
-                const instance = level.layerInstances[i];
+        const ldtk_level = self.ldtk.levels[level];
+        var i = ldtk_level.layerInstances.len;
+        while (i > 0) {
+            i -= 1;
+            const instance = ldtk_level.layerInstances[i];
 
-                scene.begin();
-                for (instance.autoLayerTiles) |tile| {
-                    // 'coercing' error into null, so that we can easily null-check for ease of use.
-                    // might indicate that we want bound_check to return null instead of error type hm...
-                    const tile_world_pos: rl.Vector2 = .{
-                        .x = @floatFromInt(tile.px[0] + instance.__pxTotalOffsetX + level.worldX),
-                        .y = @floatFromInt(tile.px[1] + instance.__pxTotalOffsetY + level.worldY),
-                    };
-                    if (camera.bound_check(tile_world_pos) catch null) |camera_pos| {
-                        const flip_x = (tile.f == 1 or tile.f == 3);
-                        const flip_y = (tile.f == 2 or tile.f == 3);
-                        rl.drawTexturePro(
-                            self.visible,
-                            .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
-                            .{ .x = camera_pos.x, .y = camera_pos.y, .width = tile_width, .height = tile_width },
-                            rl.Vector2.zero(),
-                            0,
-                            rl.Color.white,
-                        );
-                    }
+            for (instance.autoLayerTiles) |tile| {
+                // 'coercing' error into null, so that we can easily null-check for ease of use.
+                // might indicate that we want bound_check to return null instead of error type hm...
+                const tile_world_pos: rl.Vector2 = .{
+                    .x = @floatFromInt(tile.px[0] + instance.__pxTotalOffsetX + ldtk_level.worldX),
+                    .y = @floatFromInt(tile.px[1] + instance.__pxTotalOffsetY + ldtk_level.worldY),
+                };
+                if (camera.bound_check(tile_world_pos) catch null) |camera_pos| {
+                    const flip_x = (tile.f == 1 or tile.f == 3);
+                    const flip_y = (tile.f == 2 or tile.f == 3);
+                    rl.drawTexturePro(
+                        tilesheet,
+                        .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
+                        .{ .x = camera_pos.x, .y = camera_pos.y, .width = tile_width, .height = tile_width },
+                        rl.Vector2.zero(),
+                        0,
+                        rl.Color.white,
+                    );
                 }
-                scene.end();
+            }
+        }
+    }
 
-                invisible_scene.begin();
-                for (instance.autoLayerTiles) |tile| {
-                    const tile_world_pos: rl.Vector2 = .{
-                        .x = @floatFromInt(tile.px[0] + instance.__pxTotalOffsetX + level.worldX),
-                        .y = @floatFromInt(tile.px[1] + instance.__pxTotalOffsetY + level.worldY),
-                    };
-                    if (camera.bound_check(tile_world_pos) catch null) |camera_pos| {
-                        const flip_x = (tile.f == 1 or tile.f == 3);
-                        const flip_y = (tile.f == 2 or tile.f == 3);
-                        rl.drawTexturePro(
-                            self.invisible,
-                            .{ .x = tile.src[0], .y = tile.src[1], .width = if (flip_x) -tile_width else tile_width, .height = if (flip_y) -tile_width else tile_width },
-                            .{ .x = camera_pos.x, .y = camera_pos.y, .width = tile_width, .height = tile_width },
-                            rl.Vector2.zero(),
-                            0,
-                            rl.Color.white,
-                        );
-                    }
-                }
-                invisible_scene.end();
+    pub fn draw_visible(self: @This(), camera: Camera, level: usize) void {
+        self.draw_level(camera, level, self.visible);
+    }
 
-                occlusion_mask.begin();
-                for (self.collisions[0]) |collision| {
-                    if (camera.bound_check(.{ .x = collision.x, .y = collision.y }) catch null) |camera_pos| {
-                        rl.drawRectangleRec(.{ .x = camera_pos.x, .y = camera_pos.y, .width = collision.width, .height = collision.width }, rl.Color.black);
-                    }
-                }
-                occlusion_mask.end();
+    pub fn draw_invisible(self: @This(), camera: Camera, level: usize) void {
+        self.draw_level(camera, level, self.invisible);
+    }
+
+    pub fn draw_occlusion(self: @This(), camera: Camera, level: usize) void {
+        for (self.collisions[level]) |collision| {
+            if (camera.bound_check(.{ .x = collision.x, .y = collision.y }) catch null) |camera_pos| {
+                rl.drawRectangleRec(.{ .x = camera_pos.x, .y = camera_pos.y, .width = collision.width, .height = collision.width }, rl.Color.black);
             }
         }
     }
