@@ -103,13 +103,13 @@ pub fn main() !void {
         const render_ratio: f32 = @as(f32, @floatFromInt(RENDER_WIDTH)) / @as(f32, @floatFromInt(WINDOW_WIDTH));
         const cursor_pos = raw_cursor_position.scale(render_ratio).add(state.camera.offset);
 
-        player.update(state.level.collisions, frametime, cursor_pos);
+        player.update(state.level.collisions[0], frametime, cursor_pos);
         if (player.velocity.length() > 0) {
             try try_spawning_particle(&state, player.position, player.velocity, 10);
         }
 
-        for (state.level.guards) |*g| {
-            g.update(player.*, state.level.collisions, state.level.navigation_maps[0], frametime);
+        for (state.level.guards[0]) |*g| {
+            g.update(player.*, state.level.collisions[0], state.level.navigation_maps[0], frametime);
             if (g.velocity.length() > 0) {
                 try try_spawning_particle(&state, g.position, g.velocity, 20);
             }
@@ -165,18 +165,18 @@ pub fn main() !void {
 
         player.draw(state.camera.offset, false);
         // Need to draw him normal style
-        for (state.level.guards) |guard| {
+        for (state.level.guards[0]) |guard| {
             guard.draw(state.camera.offset);
         }
 
-        for (state.level.items) |item| {
+        for (state.level.items[0]) |item| {
             item.draw(state.camera.offset);
         }
 
         state.scene.end();
 
         state.invisible_scene.begin();
-        for (state.level.guards) |g| {
+        for (state.level.guards[0]) |g| {
             g.draw_intuition(state.camera.offset);
         }
         state.invisible_scene.end();
@@ -257,23 +257,30 @@ const Level = struct {
     ldtk: Ldtk,
     invisible: rl.Texture,
     visible: rl.Texture,
-    collisions: []rl.Rectangle,
-    guards: []character.Guard,
     player: character.Player,
-    items: []ItemPickup,
+    // [level][]rl.Rectangle
+    collisions: [][]rl.Rectangle,
+    // [level][]character.Guard
+    guards: [][]character.Guard,
+    // [level][]ItemPickup
+    items: [][]ItemPickup,
+    // [level][y][x]bool
     navigation_maps: [][][]bool,
 
     pub fn init(allocator: std.mem.Allocator) !Level {
         var player: character.Player = undefined;
         const ldtk = try Ldtk.init("assets/sample.ldtk");
-        var collisions = std.ArrayList(rl.Rectangle).init(allocator);
-        var guards = std.ArrayList(character.Guard).init(allocator);
-        var items = std.ArrayList(ItemPickup).init(allocator);
+        var collisions = std.ArrayList([]rl.Rectangle).init(allocator);
+        var guards = std.ArrayList([]character.Guard).init(allocator);
+        var items = std.ArrayList([]ItemPickup).init(allocator);
         var navigation_maps = std.ArrayList([][]bool).init(allocator);
 
         const tile_width = 8;
 
         for (ldtk.levels) |level| {
+            var level_collisions = std.ArrayList(rl.Rectangle).init(allocator);
+            var level_guards = std.ArrayList(character.Guard).init(allocator);
+            var level_items = std.ArrayList(ItemPickup).init(allocator);
             var navigation_map = std.ArrayList([]bool).init(allocator);
             for (0..@divTrunc(level.pxHei, tile_width)) |_| {
                 var row = try std.ArrayList(bool).initCapacity(allocator, @divTrunc(level.pxWid, tile_width));
@@ -294,10 +301,10 @@ const Level = struct {
                             const y: i32 = @divFloor(i32_index, instance.__cWid);
                             const x: i32 = @mod(i32_index, instance.__cWid);
                             const tile_world_pos: rl.Vector2 = .{
-                                .x = @floatFromInt((x * 8) + instance.__pxTotalOffsetX + level.worldX),
-                                .y = @floatFromInt((y * 8) + instance.__pxTotalOffsetY + level.worldY),
+                                .x = @floatFromInt((x * tile_width) + instance.__pxTotalOffsetX + level.worldX),
+                                .y = @floatFromInt((y * tile_width) + instance.__pxTotalOffsetY + level.worldY),
                             };
-                            try collisions.append(.{ .x = tile_world_pos.x, .y = tile_world_pos.y, .height = 8, .width = 8 });
+                            try level_collisions.append(.{ .x = tile_world_pos.x, .y = tile_world_pos.y, .height = tile_width, .width = tile_width });
                         }
                     }
                 }
@@ -312,9 +319,9 @@ const Level = struct {
                             const position: rl.Vector2 = .{ .x = @floatFromInt(e.px[0]), .y = @floatFromInt(e.px[1]) };
                             var patrol_path = std.ArrayList(rl.Vector2).init(allocator);
                             for (e.fieldInstances[0].__value) |v| {
-                                try patrol_path.append(rl.Vector2{ .x = @floatFromInt(v.cx * 16), .y = @floatFromInt(v.cy * 16) });
+                                try patrol_path.append(rl.Vector2{ .x = @floatFromInt(v.cx * tile_width), .y = @floatFromInt(v.cy * tile_width) });
                             }
-                            try guards.append(try character.Guard.init(allocator, position, try patrol_path.toOwnedSlice()));
+                            try level_guards.append(try character.Guard.init(allocator, position, try patrol_path.toOwnedSlice()));
                         }
                         if (is_player) {
                             const position: rl.Vector2 = .{ .x = @floatFromInt(e.px[0]), .y = @floatFromInt(e.px[1]) };
@@ -323,12 +330,12 @@ const Level = struct {
 
                         if (is_rock) {
                             const position: rl.Vector2 = .{ .x = @floatFromInt(e.px[0]), .y = @floatFromInt(e.px[1]) };
-                            try items.append(.{ .item_type = .rock, .position = position });
+                            try level_items.append(.{ .item_type = .rock, .position = position });
                         }
                     }
                 }
             }
-            for (collisions.items) |collision| {
+            for (level_collisions.items) |collision| {
                 const x: usize = @intFromFloat(@divTrunc(collision.x - @as(f32, @floatFromInt(level.worldX)), tile_width));
                 const y: usize = @intFromFloat(@divTrunc(collision.y - @as(f32, @floatFromInt(level.worldY)), tile_width));
 
@@ -336,6 +343,9 @@ const Level = struct {
             }
 
             try navigation_maps.append(try navigation_map.toOwnedSlice());
+            try collisions.append(try level_collisions.toOwnedSlice());
+            try guards.append(try level_guards.toOwnedSlice());
+            try items.append(try level_items.toOwnedSlice());
         }
 
         return .{
@@ -407,7 +417,7 @@ const Level = struct {
                 invisible_scene.end();
 
                 occlusion_mask.begin();
-                for (self.collisions) |collision| {
+                for (self.collisions[0]) |collision| {
                     if (camera.bound_check(.{ .x = collision.x, .y = collision.y }) catch null) |camera_pos| {
                         rl.drawRectangleRec(.{ .x = camera_pos.x, .y = camera_pos.y, .width = collision.width, .height = collision.width }, rl.Color.black);
                     }
