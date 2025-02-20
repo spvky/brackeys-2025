@@ -32,6 +32,18 @@ pub const Path = struct {
         }
     }
 
+    pub fn to_world_space(self: @This()) []rl.Vector2 {
+        var tmp = self.path;
+        for (self.path, 0..) |step, i| {
+            tmp[i] = Path.from_path_space_to_world_space(step);
+        }
+        return tmp;
+    }
+
+    pub fn from_path_space_to_world_space(path_space: rl.Vector2) rl.Vector2 {
+        return .{ .x = path_space.x * 8, .y = path_space.y * 8 };
+    }
+
     pub fn from_world_space_to_path_space(world_space: rl.Vector2) rl.Vector2 {
         return .{ .x = @divFloor(world_space.x, 8), .y = @divFloor(world_space.y, 8) };
     }

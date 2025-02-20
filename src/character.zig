@@ -2,6 +2,7 @@ const std = @import("std");
 const rl = @import("raylib");
 const util = @import("utils.zig");
 const items = @import("items.zig");
+const Path = @import("path.zig").Path;
 
 pub const PlayerActionState = enum {
     normal,
@@ -139,7 +140,13 @@ pub const Player = struct {
     }
 };
 
-pub const GuardState = enum { moving, waiting, alert, chase };
+pub const GuardState = enum { moving, waiting, alert, chase, disengange };
+
+const Intuition = struct {
+    rect: rl.Rectangle,
+    color: rl.Color,
+    ttl: f32,
+};
 
 pub const Guard = struct {
     position: rl.Vector2,
@@ -156,9 +163,19 @@ pub const Guard = struct {
     patrol_index: usize = 0,
     wait_timer: Timer = Timer.init(1),
     turning_timer: Timer = Timer.init(0.75),
+    alert_timer: Timer = Timer.init(0.55),
     // Chase behavior
     last_sighted: rl.Vector2 = .{ .x = 0, .y = 0 },
     animation_t: f32 = 0,
+
+    chase_path: Path = undefined,
+    chase_index: usize = 0,
+
+    disengange_path: Path = undefined,
+    disengange_index: usize = 0,
+
+    intuitions: std.ArrayList(Intuition),
+    intuition_t: i32 = 0,
 
     const Self = @This();
 
@@ -168,21 +185,23 @@ pub const Guard = struct {
             try patrol_path.append(p);
         }
 
-        return Self{ .position = position, .patrol_path = patrol_path };
+        return Self{ .position = position, .patrol_path = patrol_path, .intuitions = std.ArrayList(Intuition).init(allocator) };
     }
 
     pub fn deinit(self: *Self) void {
         self.patrol_path.deinit();
     }
 
-    pub fn update(self: *Self, player: Player, occlusions: []rl.Rectangle, frametime: f32) void {
+    pub fn update(self: *Self, player: Player, occlusions: []rl.Rectangle, navmap: [][]bool, frametime: f32) void {
         self.check_player_spotted(player, occlusions);
         self.wait_timer.update(frametime);
         self.turning_timer.update(frametime);
+        self.update_intuition(frametime);
 
-        const target_position = self.patrol_path.items[self.patrol_index];
         switch (self.state) {
             .moving => {
+                self.try_add_intuition(rl.Color.light_gray);
+                const target_position = self.patrol_path.items[self.patrol_index];
                 if (self.position.distance(target_position) <= 0.3) {
                     self.position = target_position;
                     self.wait_timer.reset();
@@ -205,10 +224,84 @@ pub const Guard = struct {
                 }
                 self.velocity = rl.Vector2.zero();
             },
-            .alert => {
-                self.facing = self.facing.rotate(frametime * 10.0);
+            .disengange => {
+                self.try_add_intuition(rl.Color.light_gray);
+                if (self.disengange_index >= self.disengange_path.path.len) {
+                    self.state = .moving;
+                } else {
+                    const target_position = Path.from_path_space_to_world_space(self.disengange_path.path[self.disengange_index]);
+                    if (self.position.distance(target_position) <= self.velocity.length()) {
+                        self.disengange_index = self.disengange_index + 1;
+                        self.position = target_position;
+                    } else {
+                        const delta = target_position.subtract(self.position).normalize();
+                        self.facing = self.facing.lerp(self.velocity, frametime * 10);
+                        self.velocity = delta.scale(self.patrol_speed * frametime);
+                    }
+                }
             },
-            .chase => {},
+            .alert => {
+                self.alert_timer.update(frametime);
+                if (self.alert_timer.finished) {
+                    self.state = .chase;
+
+                    const path = Path.find(
+                        std.heap.page_allocator,
+                        navmap,
+                        Path.from_world_space_to_path_space(self.position),
+                        Path.from_world_space_to_path_space(self.last_sighted),
+                    ) catch {
+                        self.state = .moving;
+                        return;
+                    };
+                    self.chase_path = path;
+                    self.patrol_index = 0;
+                }
+            },
+            .chase => {
+                self.try_add_intuition(rl.Color.red);
+                if (self.chase_index >= self.chase_path.path.len) {
+                    self.state = .disengange;
+                    self.start_facing = self.facing;
+                    self.turning_timer.reset();
+                    const path = Path.find(
+                        std.heap.page_allocator,
+                        navmap,
+                        Path.from_world_space_to_path_space(self.position),
+                        Path.from_world_space_to_path_space(self.patrol_path.items[self.patrol_index]),
+                    ) catch {
+                        self.state = .moving;
+                        return;
+                    };
+                    self.disengange_path = path;
+                    self.disengange_index = 0;
+                } else {
+                    const target_position = Path.from_path_space_to_world_space(self.chase_path.path[self.chase_index]).addValue(4);
+                    const end_position = Path.from_path_space_to_world_space(self.chase_path.path[self.chase_path.path.len - 1]);
+                    if (self.position.distance(target_position) <= self.velocity.length()) {
+                        self.chase_index = self.chase_index + 1;
+                        self.position = target_position;
+
+                        if (self.last_sighted.distance(end_position) >= 16) {
+                            const path = Path.find(
+                                std.heap.page_allocator,
+                                navmap,
+                                Path.from_world_space_to_path_space(self.position),
+                                Path.from_world_space_to_path_space(self.last_sighted),
+                            ) catch {
+                                self.state = .moving;
+                                return;
+                            };
+                            self.chase_path = path;
+                            self.chase_index = 1;
+                        }
+                    } else {
+                        const delta = target_position.subtract(self.position).normalize();
+                        self.facing = self.facing.lerp(self.velocity, frametime * 10);
+                        self.velocity = delta.scale(self.patrol_speed * frametime);
+                    }
+                }
+            },
         }
         self.apply_velocity();
         self.animation_t += frametime;
@@ -238,8 +331,15 @@ pub const Guard = struct {
 
             const TOLERANCE = 0.01;
             if (marching_position.subtract(player.position).length() < TOLERANCE) {
-                self.state = .alert;
-                self.velocity = rl.Vector2.zero();
+                switch (self.state) {
+                    .chase, .alert => {},
+                    else => {
+                        self.state = .alert;
+                        self.alert_timer.reset();
+                        self.velocity = rl.Vector2.zero();
+                    },
+                }
+                self.last_sighted = player.position;
                 return;
             }
         }
@@ -282,6 +382,59 @@ pub const Guard = struct {
         const t = @abs(std.math.cos(self.animation_t * 18 * self.velocity.length()));
         // draw head
         rl.drawRectanglePro(.{ .x = pos_on_camera.x, .y = pos_on_camera.y, .height = 4, .width = 4 }, .{ .x = 2 - t * 2, .y = 2 }, rotation_degrees, rl.Color.black);
+
+        if (self.state == .chase) {
+            self.chase_path.draw_debug_lines(camera_offset, rl.Color.red);
+        }
+    }
+
+    pub fn draw_intuition(self: Self, camera_offset: rl.Vector2) void {
+        for (self.intuitions.items) |intuition| {
+            var rect = intuition.rect;
+            rect.x -= camera_offset.x;
+            rect.y -= camera_offset.y;
+            rl.drawRectangleRec(rect, intuition.color);
+        }
+    }
+
+    fn try_add_intuition(self: *Self, comptime color: rl.Color) void {
+        if (self.intuition_t > 0) return;
+        const base_position = self.position;
+        const f: f32 = @floatCast(rl.getTime() * 240);
+        var offset = self.velocity;
+        const foot_offset = blk: {
+            if (std.math.sin(f) > 0.0) {
+                break :blk offset.rotate(45 * (180.0 / std.math.pi));
+            } else {
+                break :blk offset.rotate(-45 * (180.0 / std.math.pi));
+            }
+        };
+
+        const position = base_position.add(foot_offset.scale(3));
+        self.intuitions.append(.{
+            .rect = .{ .x = position.x, .y = position.y, .width = 2, .height = 2 },
+            .color = color,
+            .ttl = 1,
+        }) catch {};
+
+        self.intuition_t = 15;
+    }
+
+    fn update_intuition(self: *Self, frametime: f32) void {
+        self.intuition_t = @max(0, self.intuition_t - 1);
+
+        var i: usize = self.intuitions.items.len;
+        while (i > 0) {
+            i -= 1;
+            var intuition = &self.intuitions.items[i];
+
+            intuition.ttl = @max(intuition.ttl - frametime, 0);
+            if (intuition.ttl == 0) {
+                _ = self.intuitions.orderedRemove(i);
+            }
+
+            intuition.color.a = @as(u8, @min(255, @as(u64, @intFromFloat(intuition.ttl * 255))));
+        }
     }
 };
 

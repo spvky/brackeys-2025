@@ -5,8 +5,8 @@ const Ldtk = @import("ldtk.zig").Ldtk;
 const Path = @import("path.zig").Path;
 const ItemPickup = @import("items.zig").ItemPickup;
 
-const WINDOW_WIDTH: i32 = 1080;
-const WINDOW_HEIGHT: i32 = 720;
+var WINDOW_WIDTH: i32 = 1080;
+var WINDOW_HEIGHT: i32 = 720;
 
 const RENDER_WIDTH: i32 = 240;
 const RENDER_HEIGHT: i32 = 160;
@@ -56,8 +56,15 @@ fn try_spawning_particle(state: *State, base_position: rl.Vector2, base_velocity
 }
 
 pub fn main() !void {
-    rl.setConfigFlags(.{ .window_resizable = true });
+    rl.setConfigFlags(.{ .window_resizable = true, .borderless_windowed_mode = true });
+
     rl.initWindow(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE);
+    const monitor = rl.getCurrentMonitor();
+    WINDOW_WIDTH = rl.getMonitorWidth(monitor);
+    WINDOW_HEIGHT = rl.getMonitorHeight(monitor);
+
+    rl.setWindowSize(WINDOW_WIDTH, WINDOW_WIDTH);
+
     rl.setTargetFPS(60);
 
     var state: State = .{
@@ -69,11 +76,6 @@ pub fn main() !void {
         .level = try Level.init(std.heap.page_allocator),
         .particles = std.ArrayList(Particle).init(std.heap.page_allocator),
     };
-
-    const before = std.time.microTimestamp();
-    var path = try Path.find(std.heap.page_allocator, state.level.navigation_maps[0], .{ .x = 0, .y = 0 }, .{ .x = 10, .y = 12 });
-    const after = std.time.microTimestamp();
-    std.log.debug("pathfinding took: {d:.2}µs", .{after - before});
 
     const shader = try rl.loadShader(
         null,
@@ -106,12 +108,8 @@ pub fn main() !void {
             try try_spawning_particle(&state, player.position, player.velocity, 10);
         }
 
-        if (state.frame_count % 30 == 0) {
-            path = try Path.find(std.heap.page_allocator, state.level.navigation_maps[0], .{ .x = 0, .y = 0 }, Path.from_world_space_to_path_space(player.position));
-        }
-
         for (state.level.guards) |*g| {
-            g.update(player.*, state.level.collisions, frametime);
+            g.update(player.*, state.level.collisions, state.level.navigation_maps[0], frametime);
             if (g.velocity.length() > 0) {
                 try try_spawning_particle(&state, g.position, g.velocity, 20);
             }
@@ -175,8 +173,13 @@ pub fn main() !void {
             item.draw(state.camera.offset);
         }
 
-        path.draw_debug_lines(state.camera.offset, rl.Color.gold);
         state.scene.end();
+
+        state.invisible_scene.begin();
+        for (state.level.guards) |g| {
+            g.draw_intuition(state.camera.offset);
+        }
+        state.invisible_scene.end();
 
         state.render_texture.begin();
         shader.activate();
@@ -196,8 +199,8 @@ pub fn main() !void {
         }, .{
             .x = 0,
             .y = 0,
-            .width = WINDOW_WIDTH,
-            .height = WINDOW_HEIGHT,
+            .width = @floatFromInt(WINDOW_WIDTH),
+            .height = @floatFromInt(WINDOW_HEIGHT),
         }, rl.Vector2.zero(), 0, rl.Color.white);
 
         // Ui
@@ -306,7 +309,7 @@ const Level = struct {
                             for (e.fieldInstances[0].__value) |v| {
                                 try patrol_path.append(rl.Vector2{ .x = @floatFromInt(v.cx * 16), .y = @floatFromInt(v.cy * 16) });
                             }
-                            try guards.append(character.Guard{ .position = position, .patrol_path = patrol_path });
+                            try guards.append(try character.Guard.init(allocator, position, try patrol_path.toOwnedSlice()));
                         }
                         if (is_player) {
                             const position: rl.Vector2 = .{ .x = @floatFromInt(e.px[0]), .y = @floatFromInt(e.px[1]) };
