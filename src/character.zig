@@ -192,7 +192,7 @@ pub const Guard = struct {
         self.patrol_path.deinit();
     }
 
-    pub fn update(self: *Self, player: Player, occlusions: []rl.Rectangle, navmap: [][]bool, frametime: f32) void {
+    pub fn update(self: *Self, player: Player, occlusions: []rl.Rectangle, navmap: [][]bool, level_offset: rl.Vector2, frametime: f32) void {
         self.check_player_spotted(player, occlusions);
         self.wait_timer.update(frametime);
         self.turning_timer.update(frametime);
@@ -229,7 +229,7 @@ pub const Guard = struct {
                 if (self.disengange_index >= self.disengange_path.path.len) {
                     self.state = .moving;
                 } else {
-                    const target_position = Path.from_path_space_to_world_space(self.disengange_path.path[self.disengange_index]);
+                    const target_position = Path.from_path_space_to_world_space(self.disengange_path.path[self.disengange_index]).add(level_offset);
                     if (self.position.distance(target_position) <= self.velocity.length()) {
                         self.disengange_index = self.disengange_index + 1;
                         self.position = target_position;
@@ -248,8 +248,8 @@ pub const Guard = struct {
                     const path = Path.find(
                         std.heap.page_allocator,
                         navmap,
-                        Path.from_world_space_to_path_space(self.position),
-                        Path.from_world_space_to_path_space(self.last_sighted),
+                        Path.from_world_space_to_path_space(self.position.subtract(level_offset)),
+                        Path.from_world_space_to_path_space(self.last_sighted.subtract(level_offset)),
                     ) catch {
                         self.state = .moving;
                         return;
@@ -267,8 +267,8 @@ pub const Guard = struct {
                     const path = Path.find(
                         std.heap.page_allocator,
                         navmap,
-                        Path.from_world_space_to_path_space(self.position),
-                        Path.from_world_space_to_path_space(self.patrol_path.items[self.patrol_index]),
+                        Path.from_world_space_to_path_space(self.position.subtract(level_offset)),
+                        Path.from_world_space_to_path_space(self.patrol_path.items[self.patrol_index].subtract(level_offset)),
                     ) catch {
                         self.state = .moving;
                         return;
@@ -276,8 +276,8 @@ pub const Guard = struct {
                     self.disengange_path = path;
                     self.disengange_index = 0;
                 } else {
-                    const target_position = Path.from_path_space_to_world_space(self.chase_path.path[self.chase_index]).addValue(4);
-                    const end_position = Path.from_path_space_to_world_space(self.chase_path.path[self.chase_path.path.len - 1]);
+                    const target_position = Path.from_path_space_to_world_space(self.chase_path.path[self.chase_index]).addValue(4).add(level_offset);
+                    const end_position = Path.from_path_space_to_world_space(self.chase_path.path[self.chase_path.path.len - 1]).add(level_offset);
                     if (self.position.distance(target_position) <= self.velocity.length()) {
                         self.chase_index = self.chase_index + 1;
                         self.position = target_position;
@@ -286,8 +286,8 @@ pub const Guard = struct {
                             const path = Path.find(
                                 std.heap.page_allocator,
                                 navmap,
-                                Path.from_world_space_to_path_space(self.position),
-                                Path.from_world_space_to_path_space(self.last_sighted),
+                                Path.from_world_space_to_path_space(self.position.subtract(level_offset)),
+                                Path.from_world_space_to_path_space(self.last_sighted.subtract(level_offset)),
                             ) catch {
                                 self.state = .moving;
                                 return;

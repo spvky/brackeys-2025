@@ -16,12 +16,12 @@ pub const Path = struct {
         return find_path(allocator, grid, start, goal);
     }
 
-    pub fn draw_debug_lines(self: @This(), camera_offset: rl.Vector2, color: rl.Color) void {
+    pub fn draw_debug_lines(self: @This(), total_offset: rl.Vector2, color: rl.Color) void {
         const path = self.path;
 
         for (path[1..], 0..) |step, x| {
-            const curr = step.scale(TILE_SIZE).addValue(TILE_SIZE / 2).subtract(camera_offset);
-            const prev = path[x].scale(TILE_SIZE).addValue(TILE_SIZE / 2).subtract(camera_offset);
+            const curr = step.scale(TILE_SIZE).addValue(TILE_SIZE / 2).subtract(total_offset);
+            const prev = path[x].scale(TILE_SIZE).addValue(TILE_SIZE / 2).subtract(total_offset);
             rl.drawLine(
                 @intFromFloat(prev.x),
                 @intFromFloat(prev.y),
@@ -30,14 +30,6 @@ pub const Path = struct {
                 color,
             );
         }
-    }
-
-    pub fn to_world_space(self: @This()) []rl.Vector2 {
-        var tmp = self.path;
-        for (self.path, 0..) |step, i| {
-            tmp[i] = Path.from_path_space_to_world_space(step);
-        }
-        return tmp;
     }
 
     pub fn from_path_space_to_world_space(path_space: rl.Vector2) rl.Vector2 {

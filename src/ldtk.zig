@@ -45,9 +45,46 @@ const EntityInstance = struct {
     __identifier: []const u8,
     px: [2]i32,
     fieldInstances: []FieldInstance,
+    iid: []const u8,
+    width: u32,
+    height: u32,
 };
 
-const FieldInstance = struct { __value: []Point };
+const EntityRef = struct {
+    entityIid: []const u8,
+    layerIid: []const u8,
+    levelIid: []const u8,
+    worldIid: []const u8,
+};
+
+const FieldInstanceValue = union(enum) {
+    points: []Point,
+    entity_ref: EntityRef,
+    _,
+};
+
+const FieldInstance = struct {
+    __type: []const u8,
+    __value: std.json.Value,
+
+    pub fn parse_value(self: @This()) !FieldInstanceValue {
+        const Case = enum {
+            @"Array<Point>",
+            EntityRef,
+        };
+        const case = std.meta.stringToEnum(Case, self.__type) orelse unreachable;
+        switch (case) {
+            .@"Array<Point>" => {
+                const result = try std.json.parseFromValue([]Point, std.heap.page_allocator, self.__value, .{ .ignore_unknown_fields = true });
+                return .{ .points = result.value };
+            },
+            .EntityRef => {
+                const result = try std.json.parseFromValue(EntityRef, std.heap.page_allocator, self.__value, .{ .ignore_unknown_fields = true });
+                return .{ .entity_ref = result.value };
+            },
+        }
+    }
+};
 
 const Point = struct {
     cx: i32,
