@@ -7,9 +7,19 @@ pub const ItemPickup = struct {
 
     const Self = @This();
 
-    pub fn update(self: *Self) void {
+    pub fn update(self: *Self, collisions: []rl.Rectangle) void {
         switch (self.state) {
             .moving => |*velocity| {
+                for (collisions) |collision| {
+                    const projected_x = self.position.add(.{ .x = velocity.x, .y = 0 });
+                    const projected_y = self.position.add(.{ .x = 0, .y = velocity.y });
+                    if (rl.checkCollisionCircleRec(projected_x, 3, collision)) {
+                        velocity.*.x *= -1;
+                    }
+                    if (rl.checkCollisionCircleRec(projected_y, 3, collision)) {
+                        velocity.*.y *= -1;
+                    }
+                }
                 self.position = self.position.add(velocity.*);
                 velocity.* = velocity.*.scale(0.98);
                 if (velocity.length() <= 1.0) {
