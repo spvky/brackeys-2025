@@ -160,7 +160,7 @@ const State = struct {
             rl.drawRectangleRec(rect, particle.color);
         }
 
-        player.draw(state.camera.offset, false);
+        player.draw(state.camera.offset);
         // Need to draw him normal style
         for (state.level.guards[state.level_index]) |guard| {
             guard.draw(state.camera.offset);
@@ -175,7 +175,8 @@ const State = struct {
             }
         }
 
-        for (state.level.items[state.level_index]) |item| {
+        for (state.level.items[state.level_index]) |*item| {
+            item.update();
             item.draw(state.camera.offset);
         }
 

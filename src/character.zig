@@ -9,6 +9,8 @@ pub const PlayerActionState = enum {
     throwing,
 };
 
+pub const PlayerHeldItem = union(items.Item) { none, rock: *items.ItemPickup, key: *items.ItemPickup };
+
 pub const Player = struct {
     position: rl.Vector2,
     base_speed: f32 = 80,
@@ -18,7 +20,8 @@ pub const Player = struct {
     max_throw_strength: f32 = 100,
     current_throw_strength: f32 = 10,
     throw_charge_timer: Timer = Timer.init(1.5),
-    held_item: items.Item = .rock,
+    held_item: PlayerHeldItem = .none,
+    cursor_position: rl.Vector2 = .{ .x = 0, .y = 0 },
     collision_detected: bool = false,
     velocity: rl.Vector2 = .{ .x = 0, .y = 0 },
     facing: rl.Vector2 = .{ .x = 0, .y = 1 },
@@ -59,11 +62,27 @@ pub const Player = struct {
         return std.math.lerp(self.min_throw_strength, self.max_throw_strength, self.throw_charge_timer.progress());
     }
 
+    pub fn throw_item(self: *Self, frametime: f32) void {
+        switch (self.held_item) {
+            .rock => |*item| {
+                item.*.position = self.position;
+                const throw_direction = self.cursor_position.subtract(self.position).normalize();
+                const throw_velocity = throw_direction.scale(frametime * self.throw_strength() * 2.5);
+                item.*.state = items.ItemState{ .moving = throw_velocity };
+                self.held_item = .none;
+            },
+            else => {},
+        }
+    }
+
     pub fn handle_action_state(self: *Self, frametime: f32) void {
-        if (rl.isMouseButtonDown(.left) and self.held_item.is_throwable()) {
+        if (rl.isMouseButtonDown(.left) and self.held_item != .none) {
             self.action_state = .throwing;
             self.throw_charge_timer.update(frametime);
         } else {
+            if (self.action_state == .throwing) {
+                self.throw_item(frametime);
+            }
             self.action_state = .normal;
             self.throw_charge_timer.reset();
         }
@@ -81,6 +100,7 @@ pub const Player = struct {
     }
 
     pub fn update(self: *Self, collisions: []rl.Rectangle, frametime: f32, cursor_position: rl.Vector2) void {
+        self.cursor_position = cursor_position;
         self.calculate_velocity(frametime);
         self.handle_action_state(frametime);
         for (collisions) |collision| {
@@ -118,12 +138,8 @@ pub const Player = struct {
         return self.position.add(self.velocity);
     }
 
-    pub fn draw(self: Self, camera_offset: rl.Vector2, show_velocity: bool) void {
+    pub fn draw(self: Self, camera_offset: rl.Vector2) void {
         const pos_on_camera = self.position.subtract(camera_offset);
-        if (show_velocity) {
-            const velocity_pos = self.projected_position().subtract(camera_offset);
-            rl.drawCircleV(velocity_pos, self.radius, rl.Color.ray_white);
-        }
 
         const rotation_degrees = std.math.atan2(self.facing.y, self.facing.x) * (180.0 / std.math.pi);
         rl.drawRectanglePro(.{ .x = pos_on_camera.x, .y = pos_on_camera.y, .height = 8, .width = 8 }, .{ .x = 4, .y = 4 }, rotation_degrees, self.color);
