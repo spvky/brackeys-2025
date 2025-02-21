@@ -30,7 +30,7 @@ pub const ItemPickup = struct {
         }
     }
 
-    pub fn pickup(self: *Self) Item {
+    pub fn pickup(self: *Self) void {
         self.state = .held;
     }
 

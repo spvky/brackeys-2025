@@ -99,7 +99,20 @@ pub const Player = struct {
         return .throwing == self.action_state and .none != self.held_item;
     }
 
-    pub fn update(self: *Self, collisions: []rl.Rectangle, frametime: f32, cursor_position: rl.Vector2) void {
+    pub fn drop_current_item(self: *Self) void {
+        switch (self.held_item) {
+            .rock => |*item| {
+                item.*.position = self.position;
+                const throw_direction = self.cursor_position.subtract(self.position).normalize();
+                const throw_velocity = throw_direction.scale(20);
+                item.*.state = items.ItemState{ .moving = throw_velocity };
+                self.held_item = .none;
+            },
+            else => {},
+        }
+    }
+
+    pub fn update(self: *Self, collisions: []rl.Rectangle, items_in_scene: []items.ItemPickup, frametime: f32, cursor_position: rl.Vector2) void {
         self.cursor_position = cursor_position;
         self.calculate_velocity(frametime);
         self.handle_action_state(frametime);
@@ -110,6 +123,18 @@ pub const Player = struct {
             }
             if (rl.checkCollisionCircleRec(.{ .x = self.position.x, .y = projected.y }, self.radius * 0.5, collision)) {
                 self.velocity.y = 0;
+            }
+        }
+
+        for (items_in_scene) |*item| {
+            if (rl.checkCollisionCircles(self.position, self.radius, item.position, item.pickup_radius())) {
+                if (rl.isKeyPressed(.e)) {
+                    if (self.held_item != .none) {
+                        self.drop_current_item();
+                    }
+                    item.pickup();
+                    self.held_item = .{ .rock = item };
+                }
             }
         }
         self.position.x += self.velocity.x;
