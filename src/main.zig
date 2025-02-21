@@ -78,7 +78,7 @@ const State = struct {
         }
 
         for (state.level.items[state.level_index]) |*item| {
-            item.update();
+            item.update(state.level.collisions[state.level_index]);
         }
 
         var i: usize = state.particles.items.len;
