@@ -4,12 +4,26 @@ const util = @import("utils.zig");
 const items = @import("items.zig");
 const Path = @import("path.zig").Path;
 
-pub const PlayerActionState = enum {
+pub const PlayerActionStateTags = enum {
     normal,
     throwing,
+    stunned,
+};
+
+pub const PlayerActionState = union(PlayerActionStateTags) {
+    normal,
+    throwing,
+    stunned: Timer,
 };
 
 pub const PlayerHeldItem = union(items.Item) { none, rock: *items.ItemPickup, key: *items.ItemPickup };
+
+pub const StunStar = struct {
+    position: rl.Vector2,
+    ttl: f32,
+
+    const Self = @This();
+};
 
 pub const Player = struct {
     position: rl.Vector2,
@@ -35,27 +49,38 @@ pub const Player = struct {
     }
 
     fn calculate_velocity(self: *Self, frametime: f32) void {
-        var x_vel: f32 = 0;
-        var y_vel: f32 = 0;
+        switch (self.action_state) {
+            .stunned => |*stunned_timer| {
+                self.velocity = rl.Vector2.zero();
+                stunned_timer.*.update(frametime);
+                if (stunned_timer.finished) {
+                    self.action_state = .normal;
+                }
+            },
+            else => {
+                var x_vel: f32 = 0;
+                var y_vel: f32 = 0;
 
-        if (rl.isKeyDown(.a)) {
-            x_vel -= 1;
-        }
-        if (rl.isKeyDown(.d)) {
-            x_vel += 1;
-        }
-        if (rl.isKeyDown(.w)) {
-            y_vel -= 1;
-        }
-        if (rl.isKeyDown(.s)) {
-            y_vel += 1;
-        }
+                if (rl.isKeyDown(.a)) {
+                    x_vel -= 1;
+                }
+                if (rl.isKeyDown(.d)) {
+                    x_vel += 1;
+                }
+                if (rl.isKeyDown(.w)) {
+                    y_vel -= 1;
+                }
+                if (rl.isKeyDown(.s)) {
+                    y_vel += 1;
+                }
 
-        var velo_normalized = rl.math.vector2Normalize(.{ .x = x_vel, .y = y_vel });
-        velo_normalized.x *= (self.speed() * frametime);
-        velo_normalized.y *= (self.speed() * frametime);
-        self.velocity = velo_normalized;
-        if (self.velocity.length() > 0) self.facing = self.facing.lerp(self.velocity, frametime * 10);
+                var velo_normalized = rl.math.vector2Normalize(.{ .x = x_vel, .y = y_vel });
+                velo_normalized.x *= (self.speed() * frametime);
+                velo_normalized.y *= (self.speed() * frametime);
+                self.velocity = velo_normalized;
+                if (self.velocity.length() > 0) self.facing = self.facing.lerp(self.velocity, frametime * 10);
+            },
+        }
     }
 
     pub fn throw_strength(self: Self) f32 {
@@ -68,7 +93,7 @@ pub const Player = struct {
                 item.*.position = self.position;
                 const throw_direction = self.cursor_position.subtract(self.position).normalize();
                 const throw_velocity = throw_direction.scale(frametime * self.throw_strength() * 2.5);
-                item.*.state = items.ItemState{ .moving = throw_velocity };
+                item.*.state = items.ItemState{ .moving = .{ .velocity = throw_velocity, .ricochets = 0 } };
                 self.held_item = .none;
             },
             else => {},
@@ -76,23 +101,29 @@ pub const Player = struct {
     }
 
     pub fn handle_action_state(self: *Self, frametime: f32) void {
-        if (rl.isMouseButtonDown(.left) and self.held_item != .none) {
-            self.action_state = .throwing;
-            self.throw_charge_timer.update(frametime);
-        } else {
-            if (self.action_state == .throwing) {
-                self.throw_item(frametime);
+        if (self.is_actionable()) {
+            if (rl.isMouseButtonDown(.left) and self.held_item != .none) {
+                self.action_state = .throwing;
+                self.throw_charge_timer.update(frametime);
+            } else {
+                if (self.action_state == .throwing) {
+                    self.throw_item(frametime);
+                }
+                self.action_state = .normal;
+                self.throw_charge_timer.reset();
             }
-            self.action_state = .normal;
-            self.throw_charge_timer.reset();
         }
     }
 
     pub fn speed(self: Self) f32 {
         switch (self.action_state) {
             .throwing => return self.base_speed * 0.5,
-            .normal => return self.base_speed,
+            else => return self.base_speed,
         }
+    }
+
+    pub fn is_actionable(self: Self) bool {
+        return self.action_state != .stunned;
     }
 
     pub fn charging_throw(self: Self) bool {
@@ -105,7 +136,7 @@ pub const Player = struct {
                 item.*.position = self.position;
                 const throw_direction = self.cursor_position.subtract(self.position).normalize();
                 const throw_velocity = throw_direction.scale(20);
-                item.*.state = items.ItemState{ .moving = throw_velocity };
+                item.*.state = items.ItemState{ .moving = .{ .velocity = throw_velocity, .ricochets = 0 } };
                 self.held_item = .none;
             },
             else => {},
@@ -116,6 +147,7 @@ pub const Player = struct {
         self.cursor_position = cursor_position;
         self.calculate_velocity(frametime);
         self.handle_action_state(frametime);
+        // Collide with Tiles
         for (collisions) |collision| {
             const projected = self.projected_position();
             if (rl.checkCollisionCircleRec(.{ .x = projected.x, .y = self.position.y }, self.radius * 0.5, collision)) {
@@ -126,14 +158,32 @@ pub const Player = struct {
             }
         }
 
+        // Item Interactions
         for (items_in_scene) |*item| {
             if (rl.checkCollisionCircles(self.position, self.radius, item.position, item.pickup_radius())) {
-                if (rl.isKeyPressed(.e)) {
-                    if (self.held_item != .none) {
-                        self.drop_current_item();
-                    }
-                    item.pickup();
-                    self.held_item = .{ .rock = item };
+                switch (item.state) {
+                    // Pickup items logic
+                    .dormant => {
+                        if (rl.isKeyPressed(.e)) {
+                            if (self.held_item != .none) {
+                                self.drop_current_item();
+                            }
+                            item.pickup();
+                            self.held_item = .{ .rock = item };
+                        }
+                    },
+                    // Getting hit by a ricochet
+                    .moving => |*moving_item| {
+                        if (moving_item.ricochets > 0 and moving_item.velocity.length() > 1) {
+                            const item_projected_position: rl.Vector2 = item.position.add(moving_item.velocity);
+                            if (rl.checkCollisionCircles(self.projected_position(), self.radius * 0.5, item_projected_position, 3)) {
+                                moving_item.*.velocity = moving_item.velocity.scale(-1);
+                                moving_item.*.ricochets += 1;
+                                self.action_state = .{ .stunned = Timer.init(0.5) };
+                            }
+                        }
+                    },
+                    else => {},
                 }
             }
         }
@@ -147,7 +197,7 @@ pub const Player = struct {
         const adjusted_frametime = blk: {
             switch (self.action_state) {
                 .throwing => break :blk 0.5 * frametime,
-                .normal => break :blk frametime,
+                else => break :blk frametime,
             }
         };
         self.animation_t += adjusted_frametime;
