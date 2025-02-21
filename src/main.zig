@@ -182,6 +182,11 @@ const State = struct {
         }
 
         for (state.level.items[state.level_index]) |*item| {
+            // TODO these do not take into account the level offset
+            // which is honestly really annoying
+            // I am considering just removing the level offset for all objects
+            // and just naively never care for any level but the one the player is currently in
+            // this will need to be revised later though, if multiplayer is on the table
             item.draw(state.camera.offset);
         }
 
