@@ -5,6 +5,7 @@ const transitions = @import("transition.zig");
 const Camera = @import("camera.zig").Camera;
 const Level = @import("level.zig").Level;
 const Portal = @import("level.zig").Portal;
+const UiState = @import("ui.zig").UiState;
 const consts = @import("consts.zig");
 const RENDER_WIDTH = consts.RENDER_WIDTH;
 const RENDER_HEIGHT = consts.RENDER_HEIGHT;
@@ -40,6 +41,7 @@ const State = struct {
 
     // game contexts
     clicked_portal: ?Portal = null,
+    ui_state: UiState,
 
     pub fn update(state: *@This(), frametime: f32) !void {
         var player = &state.level.player;
@@ -58,7 +60,7 @@ const State = struct {
         };
         const cursor_pos = raw_cursor_position.multiply(render_ratio).add(state.camera.offset);
 
-        player.update(state.level.collisions[state.level_index], frametime, cursor_pos);
+        player.update(state.level.collisions[state.level_index], state.level.items[state.level_index], frametime, cursor_pos);
         if (player.velocity.length() > 0) {
             try try_spawning_particle(state, player.position, player.velocity, 10);
         }
@@ -73,6 +75,10 @@ const State = struct {
             if (g.velocity.length() > 0) {
                 try try_spawning_particle(state, g.position, g.velocity, 20);
             }
+        }
+
+        for (state.level.items[state.level_index]) |*item| {
+            item.update();
         }
 
         var i: usize = state.particles.items.len;
@@ -160,7 +166,7 @@ const State = struct {
             rl.drawRectangleRec(rect, particle.color);
         }
 
-        player.draw(state.camera.offset, false);
+        player.draw(state.camera.offset);
         // Need to draw him normal style
         for (state.level.guards[state.level_index]) |guard| {
             guard.draw(state.camera.offset);
@@ -175,7 +181,7 @@ const State = struct {
             }
         }
 
-        for (state.level.items[state.level_index]) |item| {
+        for (state.level.items[state.level_index]) |*item| {
             item.draw(state.camera.offset);
         }
 
@@ -218,7 +224,7 @@ const State = struct {
 
         // Ui
         rl.drawFPS(0, 0);
-        player.debug_player() catch unreachable;
+        state.ui_state.draw(player);
         rl.endDrawing();
     }
 };
@@ -260,17 +266,7 @@ pub fn main() !void {
         "assets/shaders/occlusion.fs",
     );
 
-    var state: State = .{
-        .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
-        .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
-        .render_texture = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
-        .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
-        .camera = Camera.init(),
-        .level = try Level.init(std.heap.page_allocator),
-        .particles = std.ArrayList(Particle).init(std.heap.page_allocator),
-        .transition = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT),
-        .occlusion_shader = shader,
-    };
+    var state: State = .{ .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .render_texture = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .camera = Camera.init(), .level = try Level.init(std.heap.page_allocator), .particles = std.ArrayList(Particle).init(std.heap.page_allocator), .transition = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_shader = shader, .ui_state = try UiState.init() };
 
     // start the 'intro' transission
     state.transition.start(null, state.render_texture.texture);
