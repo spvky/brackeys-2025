@@ -109,8 +109,11 @@ pub fn main() !void {
         state.camera.update();
 
         const raw_cursor_position = rl.getMousePosition();
-        const render_ratio: f32 = @as(f32, @floatFromInt(RENDER_WIDTH)) / @as(f32, @floatFromInt(WINDOW_WIDTH));
-        const cursor_pos = raw_cursor_position.scale(render_ratio).add(state.camera.offset);
+        const render_ratio: rl.Vector2 = .{
+            .x = @as(f32, @floatFromInt(RENDER_WIDTH)) / @as(f32, @floatFromInt(WINDOW_WIDTH)),
+            .y = @as(f32, @floatFromInt(RENDER_HEIGHT)) / @as(f32, @floatFromInt(WINDOW_HEIGHT)),
+        };
+        const cursor_pos = raw_cursor_position.multiply(render_ratio).add(state.camera.offset);
 
         player.update(state.level.collisions[state.level_index], frametime, cursor_pos);
         if (player.velocity.length() > 0) {
