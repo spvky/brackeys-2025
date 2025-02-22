@@ -13,3 +13,7 @@ pub fn ease_in_out_back(x: f32) f32 {
         return 0.5 * (adjusted_x * adjusted_x * ((c2 + 1) * adjusted_x + c2) + 2);
     }
 }
+
+pub fn ease_in_out(x: f32) f32 {
+    return -(math.cos(math.pi * x) - 1) / 2;
+}

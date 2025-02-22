@@ -170,15 +170,12 @@ const State = struct {
         // Need to draw him normal style
         for (state.level.guards[state.level_index]) |guard| {
             guard.draw(state.camera.offset);
-            if (guard.state == .chase) {
-                const lvl = state.level.ldtk.levels[state.level_index];
-                const level_offset: rl.Vector2 = .{
-                    .x = @floatFromInt(lvl.worldX),
-                    .y = @floatFromInt(lvl.worldY),
-                };
-                const total_offset = state.camera.offset.subtract(level_offset);
-                guard.chase_path.draw_debug_lines(total_offset, rl.Color.red);
-            }
+            const lvl = state.level.ldtk.levels[state.level_index];
+            const level_offset: rl.Vector2 = .{
+                .x = @floatFromInt(lvl.worldX),
+                .y = @floatFromInt(lvl.worldY),
+            };
+            guard.draw_debug(state.camera.offset, level_offset);
         }
 
         for (state.level.items[state.level_index]) |*item| {
