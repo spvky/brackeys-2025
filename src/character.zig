@@ -231,13 +231,8 @@ pub const Player = struct {
     }
 };
 
-pub const GuardState = enum {
-    moving,
-    waiting,
-    alert,
-    chase,
-    search,
-};
+pub const GuardStateTag = enum { moving, waiting, alert, chase, search, stunned };
+pub const GuardState = union(GuardStateTag) { moving, waiting, alert, chase, search, stunned: Timer };
 
 const Intuition = struct {
     rect: rl.Rectangle,
@@ -272,7 +267,6 @@ pub const Guard = struct {
 
     intuitions: std.ArrayList(Intuition),
     intuition_t: i32 = 0,
-
     searching_timer: Timer = Timer.init(2),
 
     const Self = @This();
@@ -292,12 +286,31 @@ pub const Guard = struct {
         self.patrol_path.deinit();
     }
 
-    pub fn update(self: *Self, player: Player, occlusions: []rl.Rectangle, navmap: [][]bool, level_offset: rl.Vector2, frametime: f32) void {
+    pub fn update(self: *Self, player: Player, items_in_scene: []items.ItemPickup, occlusions: []rl.Rectangle, navmap: [][]bool, level_offset: rl.Vector2, frametime: f32) void {
         self.check_player_spotted(player, occlusions);
         self.wait_timer.update(frametime);
         self.turning_timer.update(frametime);
         self.searching_timer.update(frametime);
         self.update_intuition(frametime);
+        // Item Interactions
+        for (items_in_scene) |*item| {
+            if (rl.checkCollisionCircles(self.position, self.radius, item.position, item.pickup_radius())) {
+                switch (item.state) {
+                    // Getting hit by a ricochet
+                    .moving => |*moving_item| {
+                        if (moving_item.velocity.length() > 1) {
+                            const item_projected_position: rl.Vector2 = item.position.add(moving_item.velocity);
+                            if (rl.checkCollisionCircles(self.position, self.radius * 0.5, item_projected_position, 3)) {
+                                moving_item.*.velocity = moving_item.velocity.scale(-1);
+                                moving_item.*.ricochets += 1;
+                                self.state = .{ .stunned = Timer.init(1.5) };
+                            }
+                        }
+                    },
+                    else => {},
+                }
+            }
+        }
 
         switch (self.state) {
             .moving => {
@@ -363,6 +376,13 @@ pub const Guard = struct {
                 const t = util.ease_in_out(p); // this sucks, but i tried for an hour to improve it and i can't make it nice :(
                 self.facing = self.start_facing.rotate(std.math.sin(std.math.pi * 2 * t) * 1.5);
             },
+            .stunned => |*stun_timer| {
+                stun_timer.*.update(frametime);
+                if (stun_timer.finished) {
+                    self.searching_timer.reset();
+                    self.state = .search;
+                }
+            },
             .chase => {
                 self.try_add_intuition(rl.Color.red);
                 if (self.chase_index >= self.chase_path.path.len) {
@@ -408,7 +428,9 @@ pub const Guard = struct {
                 }
             },
         }
-        self.apply_velocity();
+        if (self.state != .stunned) {
+            self.apply_velocity();
+        }
         self.animation_t += frametime;
     }
 
@@ -477,9 +499,11 @@ pub const Guard = struct {
 
     pub fn draw(self: Self, camera_offset: rl.Vector2) void {
         const pos_on_camera = self.position.subtract(camera_offset);
-        const vt = self.vision_triangle();
-        const tvt = [3]rl.Vector2{ vt[0].subtract(camera_offset), vt[1].subtract(camera_offset), vt[2].subtract(camera_offset) };
-        rl.drawTriangle(tvt[2], tvt[1], tvt[0], rl.Color.yellow.alpha(0.6));
+        if (self.state != .stunned) {
+            const vt = self.vision_triangle();
+            const tvt = [3]rl.Vector2{ vt[0].subtract(camera_offset), vt[1].subtract(camera_offset), vt[2].subtract(camera_offset) };
+            rl.drawTriangle(tvt[2], tvt[1], tvt[0], rl.Color.yellow.alpha(0.6));
+        }
 
         const rotation_degrees = std.math.atan2(self.facing.y, self.facing.x) * (180.0 / std.math.pi);
         rl.drawRectanglePro(.{ .x = pos_on_camera.x, .y = pos_on_camera.y, .height = 8, .width = 8 }, .{ .x = 4, .y = 4 }, rotation_degrees, rl.Color.red);
@@ -530,7 +554,7 @@ pub const Guard = struct {
         }
 
         const pos = self.position.subtract(camera_offset);
-        const tag = std.enums.tagName(GuardState, self.state) orelse "invalid";
+        const tag = std.enums.tagName(GuardStateTag, self.state) orelse "invalid";
         rl.drawText(@ptrCast(tag.ptr), @intFromFloat(pos.x), @intFromFloat(pos.y), 1, rl.Color.black);
     }
 

@@ -71,7 +71,7 @@ const State = struct {
                 .x = @floatFromInt(lvl.worldX),
                 .y = @floatFromInt(lvl.worldY),
             };
-            g.update(player.*, state.level.collisions[state.level_index], state.level.navigation_maps[state.level_index], level_offset, frametime);
+            g.update(player.*, state.level.items[state.level_index], state.level.collisions[state.level_index], state.level.navigation_maps[state.level_index], level_offset, frametime);
             if (g.velocity.length() > 0) {
                 try try_spawning_particle(state, g.position, g.velocity, 20);
             }
