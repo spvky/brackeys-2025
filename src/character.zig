@@ -360,7 +360,7 @@ pub const Guard = struct {
                 }
                 self.velocity = rl.Vector2.zero();
                 const p = self.searching_timer.progress();
-                const t = util.ease_in_out(p);
+                const t = util.ease_in_out(p); // this sucks, but i tried for an hour to improve it and i can't make it nice :(
                 self.facing = self.start_facing.rotate(std.math.sin(std.math.pi * 2 * t) * 1.5);
             },
             .chase => {
