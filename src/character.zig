@@ -231,7 +231,13 @@ pub const Player = struct {
     }
 };
 
-pub const GuardState = enum { moving, waiting, alert, chase, disengange };
+pub const GuardState = enum {
+    moving,
+    waiting,
+    alert,
+    chase,
+    search,
+};
 
 const Intuition = struct {
     rect: rl.Rectangle,
@@ -246,14 +252,13 @@ pub const Guard = struct {
     start_facing: rl.Vector2 = .{ .x = 0, .y = 1 },
     radius: f32 = 6,
     vision_range: f32 = 60,
-    vision_width: f32 = 1,
+    vision_width: f32 = 1.5,
     state: GuardState = .waiting,
     // Patrol behavior
-    patrol_path: std.ArrayList(rl.Vector2),
-    patrol_speed: f32 = 25,
-    patrol_index: usize = 0,
+    patrol_points: std.ArrayList(rl.Vector2),
+    patrol_point_index: usize = 0,
     wait_timer: Timer = Timer.init(1),
-    turning_timer: Timer = Timer.init(0.75),
+    turning_timer: Timer = Timer.init(0.35),
     alert_timer: Timer = Timer.init(0.55),
     // Chase behavior
     last_sighted: rl.Vector2 = .{ .x = 0, .y = 0 },
@@ -262,13 +267,17 @@ pub const Guard = struct {
     chase_path: Path = undefined,
     chase_index: usize = 0,
 
-    disengange_path: Path = undefined,
-    disengange_index: usize = 0,
+    patrol_path: Path = undefined,
+    patrol_index: usize = 0,
 
     intuitions: std.ArrayList(Intuition),
     intuition_t: i32 = 0,
 
+    searching_timer: Timer = Timer.init(2),
+
     const Self = @This();
+    const CHASE_SPEED = 45;
+    const PATROL_SPEED = 20;
 
     pub fn init(allocator: std.mem.Allocator, position: rl.Vector2, patrol_points: []rl.Vector2) !Self {
         var patrol_path = std.ArrayList(rl.Vector2).init(allocator);
@@ -276,7 +285,7 @@ pub const Guard = struct {
             try patrol_path.append(p);
         }
 
-        return Self{ .position = position, .patrol_path = patrol_path, .intuitions = std.ArrayList(Intuition).init(allocator) };
+        return Self{ .position = position, .patrol_points = patrol_path, .intuitions = std.ArrayList(Intuition).init(allocator) };
     }
 
     pub fn deinit(self: *Self) void {
@@ -287,25 +296,35 @@ pub const Guard = struct {
         self.check_player_spotted(player, occlusions);
         self.wait_timer.update(frametime);
         self.turning_timer.update(frametime);
+        self.searching_timer.update(frametime);
         self.update_intuition(frametime);
 
         switch (self.state) {
             .moving => {
                 self.try_add_intuition(rl.Color.light_gray);
-                const target_position = self.patrol_path.items[self.patrol_index];
-                if (self.position.distance(target_position) <= 0.3) {
-                    self.position = target_position;
+                if (self.patrol_index >= self.patrol_path.path.len) {
+                    const end_path_position = self.patrol_points.items[self.patrol_point_index];
+                    self.patrol_path = Path.find(std.heap.page_allocator, navmap, Path.from_world_space_to_path_space(self.position.subtract(level_offset)), Path.from_world_space_to_path_space(end_path_position.subtract(level_offset))) catch unreachable;
+                    self.patrol_index = 0;
+
                     self.wait_timer.reset();
                     self.state = .waiting;
                     self.start_facing = self.facing;
-                    self.increment_patrol_index();
+                    self.increment_patrol_point_index();
                 } else {
-                    const delta = target_position.subtract(self.position).normalize();
-                    const progress = self.turning_timer.current_time / self.turning_timer.duration;
-                    const f = util.ease_in_out_back(progress);
-                    self.facing.x = std.math.lerp(self.start_facing.x, delta.x, f);
-                    self.facing.y = std.math.lerp(self.start_facing.y, delta.y, f);
-                    self.velocity = delta.scale(self.patrol_speed * frametime);
+                    const target_position = Path.from_path_space_to_world_space(self.patrol_path.path[self.patrol_index]).add(level_offset).addValue(4);
+                    if (self.position.distance(target_position) <= self.velocity.length()) {
+                        self.patrol_index = self.patrol_index + 1;
+                        self.start_facing = self.facing;
+                        self.turning_timer.reset();
+                    } else {
+                        const delta = target_position.subtract(self.position).normalize();
+                        const progress = self.turning_timer.current_time / self.turning_timer.duration;
+                        const f = util.ease_in_out_back(progress);
+                        self.facing.x = std.math.lerp(self.start_facing.x, delta.x, f);
+                        self.facing.y = std.math.lerp(self.start_facing.y, delta.y, f);
+                        self.velocity = delta.scale(PATROL_SPEED * frametime);
+                    }
                 }
             },
             .waiting => {
@@ -314,22 +333,6 @@ pub const Guard = struct {
                     self.turning_timer.reset();
                 }
                 self.velocity = rl.Vector2.zero();
-            },
-            .disengange => {
-                self.try_add_intuition(rl.Color.light_gray);
-                if (self.disengange_index >= self.disengange_path.path.len) {
-                    self.state = .moving;
-                } else {
-                    const target_position = Path.from_path_space_to_world_space(self.disengange_path.path[self.disengange_index]).add(level_offset);
-                    if (self.position.distance(target_position) <= self.velocity.length()) {
-                        self.disengange_index = self.disengange_index + 1;
-                        self.position = target_position;
-                    } else {
-                        const delta = target_position.subtract(self.position).normalize();
-                        self.facing = self.facing.lerp(self.velocity, frametime * 10);
-                        self.velocity = delta.scale(self.patrol_speed * frametime);
-                    }
-                }
             },
             .alert => {
                 self.alert_timer.update(frametime);
@@ -349,23 +352,34 @@ pub const Guard = struct {
                     self.patrol_index = 0;
                 }
             },
+            .search => {
+                if (self.searching_timer.finished) {
+                    self.state = .moving;
+                    self.start_facing = self.facing;
+                    self.turning_timer.reset();
+                }
+                self.velocity = rl.Vector2.zero();
+                const p = self.searching_timer.progress();
+                const t = util.ease_in_out(p); // this sucks, but i tried for an hour to improve it and i can't make it nice :(
+                self.facing = self.start_facing.rotate(std.math.sin(std.math.pi * 2 * t) * 1.5);
+            },
             .chase => {
                 self.try_add_intuition(rl.Color.red);
                 if (self.chase_index >= self.chase_path.path.len) {
-                    self.state = .disengange;
+                    self.state = .search;
                     self.start_facing = self.facing;
-                    self.turning_timer.reset();
+                    self.searching_timer.reset();
                     const path = Path.find(
                         std.heap.page_allocator,
                         navmap,
                         Path.from_world_space_to_path_space(self.position.subtract(level_offset)),
-                        Path.from_world_space_to_path_space(self.patrol_path.items[self.patrol_index].subtract(level_offset)),
+                        Path.from_world_space_to_path_space(self.patrol_points.items[(self.patrol_point_index + self.patrol_points.items.len - 1) % self.patrol_points.items.len].subtract(level_offset)),
                     ) catch {
                         self.state = .moving;
                         return;
                     };
-                    self.disengange_path = path;
-                    self.disengange_index = 0;
+                    self.patrol_path = path;
+                    self.patrol_index = 0;
                 } else {
                     const target_position = Path.from_path_space_to_world_space(self.chase_path.path[self.chase_index]).addValue(4).add(level_offset);
                     const end_position = Path.from_path_space_to_world_space(self.chase_path.path[self.chase_path.path.len - 1]).add(level_offset);
@@ -389,7 +403,7 @@ pub const Guard = struct {
                     } else {
                         const delta = target_position.subtract(self.position).normalize();
                         self.facing = self.facing.lerp(self.velocity, frametime * 10);
-                        self.velocity = delta.scale(self.patrol_speed * frametime);
+                        self.velocity = delta.scale(CHASE_SPEED * frametime);
                     }
                 }
             },
@@ -440,13 +454,13 @@ pub const Guard = struct {
         self.position = self.position.add(self.velocity);
     }
 
-    fn increment_patrol_index(self: *Self) void {
-        const paths_length = self.patrol_path.items.len;
-        const new_index = self.patrol_index + 1;
+    fn increment_patrol_point_index(self: *Self) void {
+        const paths_length = self.patrol_points.items.len;
+        const new_index = self.patrol_point_index + 1;
         if (new_index > paths_length - 1) {
-            self.patrol_index = 0;
+            self.patrol_point_index = 0;
         } else {
-            self.patrol_index = new_index;
+            self.patrol_point_index = new_index;
         }
     }
 
@@ -473,10 +487,6 @@ pub const Guard = struct {
         const t = @abs(std.math.cos(self.animation_t * 18 * self.velocity.length()));
         // draw head
         rl.drawRectanglePro(.{ .x = pos_on_camera.x, .y = pos_on_camera.y, .height = 4, .width = 4 }, .{ .x = 2 - t * 2, .y = 2 }, rotation_degrees, rl.Color.black);
-
-        if (self.state == .chase) {
-            self.chase_path.draw_debug_lines(camera_offset, rl.Color.red);
-        }
     }
 
     pub fn draw_intuition(self: Self, camera_offset: rl.Vector2) void {
@@ -509,6 +519,19 @@ pub const Guard = struct {
         }) catch {};
 
         self.intuition_t = 15;
+    }
+
+    pub fn draw_debug(self: Self, camera_offset: rl.Vector2, level_offset: rl.Vector2) void {
+        const total_offset = camera_offset.subtract(level_offset);
+        switch (self.state) {
+            .chase => self.chase_path.draw_debug_lines(total_offset, rl.Color.red),
+            .moving => if (self.patrol_path.path.len > 0) self.patrol_path.draw_debug_lines(total_offset, rl.Color.blue),
+            else => {},
+        }
+
+        const pos = self.position.subtract(camera_offset);
+        const tag = std.enums.tagName(GuardState, self.state) orelse "invalid";
+        rl.drawText(@ptrCast(tag.ptr), @intFromFloat(pos.x), @intFromFloat(pos.y), 1, rl.Color.black);
     }
 
     fn update_intuition(self: *Self, frametime: f32) void {
