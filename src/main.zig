@@ -111,7 +111,12 @@ const State = struct {
         if (rl.isKeyPressed(.e)) {
             var iter = state.level.portals.valueIterator();
             while (iter.next()) |portal| {
-                if (portal.position.distance(player.position) <= 32) {
+                if (rl.checkCollisionCircleRec(.{ .x = player.position.x, .y = player.position.y }, player.radius * 0.5, .{
+                    .x = portal.position.x,
+                    .y = portal.position.y,
+                    .width = @floatFromInt(portal.width),
+                    .height = @floatFromInt(portal.height),
+                })) {
                     // start the 'fade out' transition
                     state.transition.start(state.render_texture.texture, null);
                     state.clicked_portal = portal.*;
