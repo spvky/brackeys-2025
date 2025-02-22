@@ -1,4 +1,5 @@
 const rl = @import("raylib");
+const EventQueue = @import("events.zig").EventQueue;
 
 pub const ItemPickup = struct {
     item_type: Item,
@@ -7,7 +8,7 @@ pub const ItemPickup = struct {
 
     const Self = @This();
 
-    pub fn update(self: *Self, collisions: []rl.Rectangle) void {
+    pub fn update(self: *Self, collisions: []rl.Rectangle, event_queue: *EventQueue) !void {
         switch (self.state) {
             .moving => |*moving_item| {
                 var velocity = moving_item.velocity;
@@ -25,6 +26,7 @@ pub const ItemPickup = struct {
                         ricocheted = true;
                     }
                     if (ricocheted) {
+                        try event_queue.append(.{ .ricochet = self.position });
                         ricochets = ricochets + 1;
                     }
                 }

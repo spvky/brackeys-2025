@@ -3,6 +3,7 @@ const rl = @import("raylib");
 const util = @import("utils.zig");
 const items = @import("items.zig");
 const Path = @import("path.zig").Path;
+const EventQueue = @import("events.zig").EventQueue;
 
 pub const PlayerActionStateTags = enum {
     normal,
@@ -174,7 +175,7 @@ pub const Player = struct {
                     },
                     // Getting hit by a ricochet
                     .moving => |*moving_item| {
-                        if (moving_item.ricochets > 0 and moving_item.velocity.length() > 1) {
+                        if (moving_item.ricochets > 0 and moving_item.velocity.length() > 0.85) {
                             const item_projected_position: rl.Vector2 = item.position.add(moving_item.velocity);
                             if (rl.checkCollisionCircles(self.projected_position(), self.radius * 0.5, item_projected_position, 3)) {
                                 moving_item.*.velocity = moving_item.velocity.scale(-1);
@@ -231,7 +232,8 @@ pub const Player = struct {
     }
 };
 
-pub const GuardState = enum { moving, waiting, alert, chase, disengange };
+pub const GuardStateTag = enum { moving, waiting, alert, chase, disengange, investigate };
+pub const GuardState = union(GuardStateTag) { moving, waiting, alert, chase, disengange, investigate: rl.Vector2 };
 
 const Intuition = struct {
     rect: rl.Rectangle,
@@ -268,6 +270,8 @@ pub const Guard = struct {
     intuitions: std.ArrayList(Intuition),
     intuition_t: i32 = 0,
 
+    hearing_radius: f32 = 200,
+
     const Self = @This();
 
     pub fn init(allocator: std.mem.Allocator, position: rl.Vector2, patrol_points: []rl.Vector2) !Self {
@@ -283,11 +287,28 @@ pub const Guard = struct {
         self.patrol_path.deinit();
     }
 
-    pub fn update(self: *Self, player: Player, occlusions: []rl.Rectangle, navmap: [][]bool, level_offset: rl.Vector2, frametime: f32) void {
+    pub fn update(self: *Self, player: Player, occlusions: []rl.Rectangle, navmap: [][]bool, event_queue: EventQueue, level_offset: rl.Vector2, frametime: f32) void {
         self.check_player_spotted(player, occlusions);
         self.wait_timer.update(frametime);
         self.turning_timer.update(frametime);
         self.update_intuition(frametime);
+
+        const events_slice = event_queue.read();
+        if (events_slice.len > 0) {
+            std.debug.print("Guard update reached, {} events in queue\n", .{events_slice.len});
+        }
+        // Observe events in the queue
+        for (events_slice) |event| {
+            switch (event) {
+                .ricochet => |location| {
+                    if (location.distance(self.position) <= self.hearing_radius) {
+                        std.debug.print("Heard a ricochet, investigating\n", .{});
+                        self.state = .{ .investigate = location };
+                    }
+                },
+                else => {},
+            }
+        }
 
         switch (self.state) {
             .moving => {
@@ -348,6 +369,19 @@ pub const Guard = struct {
                     self.chase_path = path;
                     self.patrol_index = 0;
                 }
+            },
+            .investigate => |sound_origin| {
+                const path = Path.find(
+                    std.heap.page_allocator,
+                    navmap,
+                    Path.from_world_space_to_path_space(self.position.subtract(level_offset)),
+                    Path.from_world_space_to_path_space(sound_origin.subtract(level_offset)),
+                ) catch {
+                    self.state = .moving;
+                    return;
+                };
+                self.chase_path = path;
+                self.patrol_index = 0;
             },
             .chase => {
                 self.try_add_intuition(rl.Color.red);
@@ -477,6 +511,8 @@ pub const Guard = struct {
         if (self.state == .chase) {
             self.chase_path.draw_debug_lines(camera_offset, rl.Color.red);
         }
+
+        rl.drawCircleV(pos_on_camera, self.hearing_radius, rl.Color.green.alpha(0.2));
     }
 
     pub fn draw_intuition(self: Self, camera_offset: rl.Vector2) void {

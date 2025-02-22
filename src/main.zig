@@ -6,6 +6,7 @@ const Camera = @import("camera.zig").Camera;
 const Level = @import("level.zig").Level;
 const Portal = @import("level.zig").Portal;
 const UiState = @import("ui.zig").UiState;
+const EventQueue = @import("events.zig").EventQueue;
 const consts = @import("consts.zig");
 const RENDER_WIDTH = consts.RENDER_WIDTH;
 const RENDER_HEIGHT = consts.RENDER_HEIGHT;
@@ -42,6 +43,7 @@ const State = struct {
     // game contexts
     clicked_portal: ?Portal = null,
     ui_state: UiState,
+    event_queue: EventQueue,
 
     pub fn update(state: *@This(), frametime: f32) !void {
         var player = &state.level.player;
@@ -64,6 +66,9 @@ const State = struct {
         if (player.velocity.length() > 0) {
             try try_spawning_particle(state, player.position, player.velocity, 10);
         }
+        for (state.level.items[state.level_index]) |*item| {
+            try item.update(state.level.collisions[state.level_index], &state.event_queue);
+        }
 
         for (state.level.guards[state.level_index]) |*g| {
             const lvl = state.level.ldtk.levels[state.level_index];
@@ -71,14 +76,10 @@ const State = struct {
                 .x = @floatFromInt(lvl.worldX),
                 .y = @floatFromInt(lvl.worldY),
             };
-            g.update(player.*, state.level.collisions[state.level_index], state.level.navigation_maps[state.level_index], level_offset, frametime);
+            g.update(player.*, state.level.collisions[state.level_index], state.level.navigation_maps[state.level_index], state.event_queue, level_offset, frametime);
             if (g.velocity.length() > 0) {
                 try try_spawning_particle(state, g.position, g.velocity, 20);
             }
-        }
-
-        for (state.level.items[state.level_index]) |*item| {
-            item.update(state.level.collisions[state.level_index]);
         }
 
         var i: usize = state.particles.items.len;
@@ -142,6 +143,7 @@ const State = struct {
         state.transition.update(frametime);
 
         state.frame_count += 1;
+        state.event_queue.flush();
     }
 
     pub fn draw(state: @This()) void {
@@ -271,7 +273,7 @@ pub fn main() !void {
         "assets/shaders/occlusion.fs",
     );
 
-    var state: State = .{ .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .render_texture = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .camera = Camera.init(), .level = try Level.init(std.heap.page_allocator), .particles = std.ArrayList(Particle).init(std.heap.page_allocator), .transition = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_shader = shader, .ui_state = try UiState.init() };
+    var state: State = .{ .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .render_texture = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .camera = Camera.init(), .level = try Level.init(std.heap.page_allocator), .particles = std.ArrayList(Particle).init(std.heap.page_allocator), .transition = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_shader = shader, .ui_state = try UiState.init(), .event_queue = EventQueue.init(std.heap.page_allocator) };
 
     // start the 'intro' transission
     state.transition.start(null, state.render_texture.texture);
