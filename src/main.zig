@@ -35,7 +35,8 @@ const GameState = enum {
 const State = struct {
     state: GameState,
     gameplay_scene: GameplayScene,
-    main_menu_scene: MainMenuScene,
+    main_menu_scene: MenuScene,
+    pause_scene: MenuScene,
     frame_count: u32 = 0,
 
     pub fn update(self: *@This()) !void {
@@ -45,6 +46,12 @@ const State = struct {
             .gameplay => {
                 self.gameplay_scene.update_player(dt);
                 try self.gameplay_scene.update(dt, self.frame_count);
+
+                // SUPER UGLY
+                // should be 'escape' key
+                if (rl.isKeyPressed(.escape)) {
+                    self.state = .pause;
+                }
             },
             .main_menu => {
                 self.main_menu_scene.update();
@@ -55,12 +62,24 @@ const State = struct {
                 if (rl.isKeyPressed(.e)) {
                     switch (self.main_menu_scene.selected_index) {
                         0 => self.state = .gameplay,
-                        1 => {}, // exit here
+                        1 => rl.closeWindow(),
                         else => {},
                     }
                 }
             },
-            else => {},
+            .pause => {
+                self.pause_scene.update();
+
+                // SUPER UGLY
+                // should be a callback inside 'MenuOption' but i couldn't make it work due to comptime
+                if (rl.isKeyPressed(.e)) {
+                    switch (self.pause_scene.selected_index) {
+                        0 => self.state = .gameplay,
+                        1 => rl.closeWindow(),
+                        else => {},
+                    }
+                }
+            },
         }
     }
 
@@ -75,7 +94,11 @@ const State = struct {
                 const gameplay_render_texture = self.gameplay_scene.render_texture;
                 self.main_menu_scene.draw(gameplay_render_texture.texture);
             },
-            else => {},
+            .pause => {
+                self.gameplay_scene.prepare_scene();
+                const gameplay_render_texture = self.gameplay_scene.render_texture;
+                self.pause_scene.draw(gameplay_render_texture.texture);
+            },
         }
     }
 };
@@ -84,8 +107,9 @@ const MenuOption = struct {
     title: []const u8,
 };
 
-const MainMenuScene = struct {
+const MenuScene = struct {
     selected_index: u64 = 0,
+    title: []const u8,
     /// the final render texture that is upscaled and shown to the player
     render_texture: rl.RenderTexture,
     menu_options: []const MenuOption,
@@ -101,8 +125,13 @@ const MainMenuScene = struct {
 
     pub fn draw(self: @This(), gameplay_texture: rl.Texture) void {
         self.render_texture.begin();
-        //TODO: make slightly darker maybe? something like: 0, 0, 0, 80
-        rl.clearBackground(rl.Color.blank);
+        var background_color = rl.Color.black;
+        background_color = background_color.alpha(0.3);
+        rl.clearBackground(background_color);
+
+        const big_size = 20;
+        const str_len: i32 = @intCast(rl.textLength(@ptrCast(self.title.ptr)));
+        rl.drawText(@ptrCast(self.title.ptr), MENU_WIDTH / 2 - (big_size * @divTrunc(str_len, 2)), 20, big_size, rl.Color.black);
 
         const font_size = 8;
         for (self.menu_options, 0..) |option, idx| {
@@ -110,7 +139,8 @@ const MainMenuScene = struct {
             const y: i32 = @intCast(MENU_HEIGHT / 4 + idx * font_size * 2);
 
             const clr = if (idx != self.selected_index) rl.Color.black else rl.Color.white;
-            rl.drawText(@ptrCast(option.title.ptr), x, y, font_size, clr);
+            const text = if (idx != self.selected_index) rl.textFormat("  %s", .{option.title.ptr}) else rl.textFormat("* %s", .{option.title.ptr});
+            rl.drawText(text, x, y, font_size, clr);
         }
         self.render_texture.end();
 
@@ -442,15 +472,23 @@ pub fn main() !void {
         .main_menu_scene = .{
             .menu_options = &.{ .{ .title = "START GAME" }, .{ .title = "EXIT" } },
             .render_texture = try rl.loadRenderTexture(MENU_WIDTH, MENU_HEIGHT),
+            .title = TITLE,
+        },
+        .pause_scene = .{
+            .menu_options = &.{ .{ .title = "START GAME" }, .{ .title = "QUIT" } },
+            .render_texture = try rl.loadRenderTexture(MENU_WIDTH, MENU_HEIGHT),
+            .title = "PAUSED",
         },
         .state = .main_menu,
     };
 
     state.gameplay_scene.transition.start(null, state.gameplay_scene.render_texture.texture);
 
+    rl.setExitKey(.backspace);
+
     rl.setShaderValue(shader, rl.getShaderLocation(shader, "size"), &rl.Vector2{ .x = RENDER_WIDTH, .y = RENDER_HEIGHT }, .vec2);
     while (!rl.windowShouldClose()) {
-        try state.update();
         state.draw();
+        try state.update();
     }
 }
