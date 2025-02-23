@@ -13,6 +13,9 @@ const RENDER_WIDTH = consts.RENDER_WIDTH;
 const RENDER_HEIGHT = consts.RENDER_HEIGHT;
 const TITLE = consts.TITLE;
 
+const MENU_WIDTH: i32 = 280;
+const MENU_HEIGHT: i32 = 180;
+
 var WINDOW_WIDTH: i32 = 1080;
 var WINDOW_HEIGHT: i32 = 720;
 
@@ -23,7 +26,153 @@ const Particle = struct {
     ttl: f32,
 };
 
+const GameState = enum {
+    gameplay,
+    main_menu,
+    pause,
+};
+
 const State = struct {
+    state: GameState,
+    gameplay_scene: GameplayScene,
+    main_menu_scene: MenuScene,
+    pause_scene: MenuScene,
+    frame_count: u32 = 0,
+
+    pub fn update(self: *@This()) !void {
+        const dt = rl.getFrameTime();
+        self.frame_count = self.frame_count + 1;
+        switch (self.state) {
+            .gameplay => {
+                self.gameplay_scene.update_player(dt);
+                try self.gameplay_scene.update(dt, self.frame_count);
+
+                // SUPER UGLY
+                // should be 'escape' key
+                if (rl.isKeyPressed(.escape)) {
+                    self.state = .pause;
+                }
+            },
+            .main_menu => {
+                self.main_menu_scene.update();
+                try self.gameplay_scene.update(dt, self.frame_count);
+
+                // SUPER UGLY
+                // should be a callback inside 'MenuOption' but i couldn't make it work due to comptime
+                if (rl.isKeyPressed(.e)) {
+                    switch (self.main_menu_scene.selected_index) {
+                        0 => self.state = .gameplay,
+                        1 => rl.closeWindow(),
+                        else => {},
+                    }
+                }
+            },
+            .pause => {
+                self.pause_scene.update();
+
+                // SUPER UGLY
+                // should be a callback inside 'MenuOption' but i couldn't make it work due to comptime
+                if (rl.isKeyPressed(.e)) {
+                    switch (self.pause_scene.selected_index) {
+                        0 => self.state = .gameplay,
+                        1 => rl.closeWindow(),
+                        else => {},
+                    }
+                }
+            },
+        }
+    }
+
+    pub fn draw(self: @This()) void {
+        switch (self.state) {
+            .gameplay => {
+                self.gameplay_scene.prepare_scene();
+                self.gameplay_scene.draw();
+            },
+            .main_menu => {
+                self.gameplay_scene.prepare_scene();
+                const gameplay_render_texture = self.gameplay_scene.render_texture;
+                self.main_menu_scene.draw(gameplay_render_texture.texture);
+            },
+            .pause => {
+                self.gameplay_scene.prepare_scene();
+                const gameplay_render_texture = self.gameplay_scene.render_texture;
+                self.pause_scene.draw(gameplay_render_texture.texture);
+            },
+        }
+    }
+};
+
+const MenuOption = struct {
+    title: []const u8,
+};
+
+const MenuScene = struct {
+    selected_index: u64 = 0,
+    title: []const u8,
+    /// the final render texture that is upscaled and shown to the player
+    render_texture: rl.RenderTexture,
+    menu_options: []const MenuOption,
+
+    pub fn update(self: *@This()) void {
+        if (rl.isKeyPressed(.w)) {
+            self.selected_index = (self.selected_index + self.menu_options.len - 1) % self.menu_options.len;
+        }
+        if (rl.isKeyPressed(.s)) {
+            self.selected_index = (self.selected_index + 1) % self.menu_options.len;
+        }
+    }
+
+    pub fn draw(self: @This(), gameplay_texture: rl.Texture) void {
+        self.render_texture.begin();
+        var background_color = rl.Color.black;
+        background_color = background_color.alpha(0.3);
+        rl.clearBackground(background_color);
+
+        const big_size = 20;
+        const str_len: i32 = @intCast(rl.textLength(@ptrCast(self.title.ptr)));
+        rl.drawText(@ptrCast(self.title.ptr), MENU_WIDTH / 2 - (big_size * @divTrunc(str_len, 2)), 20, big_size, rl.Color.black);
+
+        const font_size = 8;
+        for (self.menu_options, 0..) |option, idx| {
+            const x: i32 = @intCast(MENU_WIDTH / 4);
+            const y: i32 = @intCast(MENU_HEIGHT / 4 + idx * font_size * 2);
+
+            const clr = if (idx != self.selected_index) rl.Color.black else rl.Color.white;
+            const text = if (idx != self.selected_index) rl.textFormat("  %s", .{option.title.ptr}) else rl.textFormat("* %s", .{option.title.ptr});
+            rl.drawText(text, x, y, font_size, clr);
+        }
+        self.render_texture.end();
+
+        rl.beginDrawing();
+        rl.drawTexturePro(gameplay_texture, .{
+            .x = 0,
+            .y = 0,
+            .width = RENDER_WIDTH,
+            .height = RENDER_HEIGHT,
+        }, .{
+            .x = 0,
+            .y = 0,
+            .width = @floatFromInt(WINDOW_WIDTH),
+            .height = @floatFromInt(WINDOW_HEIGHT),
+        }, rl.Vector2.zero(), 0, rl.Color.white);
+
+        rl.drawTexturePro(self.render_texture.texture, .{
+            .x = 0,
+            .y = 0,
+            .width = MENU_WIDTH,
+            .height = -MENU_HEIGHT,
+        }, .{
+            .x = 0,
+            .y = 0,
+            .width = @floatFromInt(WINDOW_WIDTH),
+            .height = @floatFromInt(WINDOW_HEIGHT),
+        }, rl.Vector2.zero(), 0, rl.Color.white);
+        rl.endDrawing();
+    }
+};
+
+const GameplayScene = struct {
     /// the scene we draw to, it's dimensions are static
     scene: rl.RenderTexture,
     /// the version of the scene which is not visible
@@ -37,7 +186,6 @@ const State = struct {
     level: Level,
     transition: transitions.Diamond,
     particles: std.ArrayList(Particle),
-    frame_count: u32 = 0,
 
     level_index: usize = 2,
 
@@ -49,7 +197,21 @@ const State = struct {
     relic2: bool = false,
     relic3: bool = false,
 
-    pub fn update(state: *@This(), frametime: f32) !void {
+    /// this is not great. It's supposed to seperate the 'update' from the 'input' so that we can use input for other things
+    /// while still 'updating' gameplay scene state
+    pub fn update_player(state: *@This(), frametime: f32) void {
+        var player = &state.level.player;
+        const raw_cursor_position = rl.getMousePosition();
+        const render_ratio: rl.Vector2 = .{
+            .x = @as(f32, @floatFromInt(RENDER_WIDTH)) / @as(f32, @floatFromInt(WINDOW_WIDTH)),
+            .y = @as(f32, @floatFromInt(RENDER_HEIGHT)) / @as(f32, @floatFromInt(WINDOW_HEIGHT)),
+        };
+        const cursor_pos = raw_cursor_position.multiply(render_ratio).add(state.camera.offset);
+
+        player.update(state.level.collisions[state.level_index], state.level.items[state.level_index], frametime, cursor_pos, state.sound_bank);
+    }
+
+    pub fn update(state: *@This(), frametime: f32, frame_count: u32) !void {
         var player = &state.level.player;
         const target_pos = player.position.subtract(.{ .x = RENDER_WIDTH / 2, .y = RENDER_HEIGHT / 2 });
         var level_bounds = state.level.get_bounds(state.level_index);
@@ -59,16 +221,8 @@ const State = struct {
         state.camera.set_target(target_pos, level_bounds);
         state.camera.update();
 
-        const raw_cursor_position = rl.getMousePosition();
-        const render_ratio: rl.Vector2 = .{
-            .x = @as(f32, @floatFromInt(RENDER_WIDTH)) / @as(f32, @floatFromInt(WINDOW_WIDTH)),
-            .y = @as(f32, @floatFromInt(RENDER_HEIGHT)) / @as(f32, @floatFromInt(WINDOW_HEIGHT)),
-        };
-        const cursor_pos = raw_cursor_position.multiply(render_ratio).add(state.camera.offset);
-
-        player.update(state.level.collisions[state.level_index], state.level.items[state.level_index], frametime, cursor_pos, state.sound_bank);
         if (player.velocity.length() > 0) {
-            try try_spawning_particle(state, player.position, player.velocity, 10);
+            try try_spawning_particle(state, player.position, player.velocity, frame_count, 10);
         }
 
         for (state.level.guards[state.level_index]) |*g| {
@@ -79,7 +233,7 @@ const State = struct {
             };
             g.update(player.*, state.level.items[state.level_index], state.level.collisions[state.level_index], state.level.navigation_maps[state.level_index], level_offset, frametime, state.sound_bank);
             if (g.velocity.length() > 0) {
-                try try_spawning_particle(state, g.position, g.velocity, 20);
+                try try_spawning_particle(state, g.position, g.velocity, frame_count, 20);
             }
         }
 
@@ -169,11 +323,9 @@ const State = struct {
         }
 
         state.transition.update(frametime);
-
-        state.frame_count += 1;
     }
 
-    pub fn draw(state: @This()) void {
+    pub fn prepare_scene(state: @This()) void {
         const player = state.level.player;
         // clearing occlusion mask
         state.occlusion_mask.begin();
@@ -239,7 +391,9 @@ const State = struct {
 
         state.transition.draw();
         state.render_texture.end();
+    }
 
+    pub fn draw(state: @This()) void {
         rl.beginDrawing();
         rl.drawTexturePro(state.render_texture.texture, .{
             .x = 0,
@@ -255,17 +409,17 @@ const State = struct {
 
         // Ui
         rl.drawFPS(0, 0);
-        UiState.draw(player, state.ui_assets, state.level_index);
+        UiState.draw(state.level.player, state.ui_assets, state.level_index);
         rl.endDrawing();
     }
 };
 
 /// spawns a particle every 'rate' frames. rate does not need to be comptime but i think it makes it more clear if we treat it as if it is
-fn try_spawning_particle(state: *State, base_position: rl.Vector2, base_velocity: rl.Vector2, comptime rate: u8) !void {
-    if (state.frame_count % rate == 0) {
+fn try_spawning_particle(state: *GameplayScene, base_position: rl.Vector2, base_velocity: rl.Vector2, frame_count: u32, comptime rate: u8) !void {
+    if (frame_count % rate == 0) {
         var velocity = base_velocity.scale(-0.1);
 
-        const f: f32 = @floatFromInt(state.frame_count);
+        const f: f32 = @floatFromInt(frame_count);
         velocity.x += std.math.sin(f) / 20;
         velocity.y += std.math.sin(f) / 20;
         const position: rl.Vector2 = .{
@@ -280,6 +434,8 @@ fn try_spawning_particle(state: *State, base_position: rl.Vector2, base_velocity
         });
     }
 }
+
+pub fn start_game_cb() void {}
 
 pub fn main() !void {
     rl.setConfigFlags(.{ .window_resizable = true, .borderless_windowed_mode = true });
@@ -299,15 +455,40 @@ pub fn main() !void {
         "assets/shaders/occlusion.fs",
     );
 
-    var state: State = .{ .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .render_texture = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .camera = Camera.init(), .level = try Level.init(std.heap.page_allocator), .particles = std.ArrayList(Particle).init(std.heap.page_allocator), .transition = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_shader = shader, .ui_assets = try UiAssets.init(), .sound_bank = try SoundBank.init() };
+    var state: State = .{
+        .gameplay_scene = .{
+            .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
+            .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
+            .render_texture = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
+            .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
+            .camera = Camera.init(),
+            .level = try Level.init(std.heap.page_allocator),
+            .particles = std.ArrayList(Particle).init(std.heap.page_allocator),
+            .transition = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT),
+            .occlusion_shader = shader,
+            .ui_assets = try UiAssets.init(),
+            .sound_bank = try SoundBank.init(),
+        },
+        .main_menu_scene = .{
+            .menu_options = &.{ .{ .title = "START GAME" }, .{ .title = "EXIT" } },
+            .render_texture = try rl.loadRenderTexture(MENU_WIDTH, MENU_HEIGHT),
+            .title = TITLE,
+        },
+        .pause_scene = .{
+            .menu_options = &.{ .{ .title = "START GAME" }, .{ .title = "QUIT" } },
+            .render_texture = try rl.loadRenderTexture(MENU_WIDTH, MENU_HEIGHT),
+            .title = "PAUSED",
+        },
+        .state = .main_menu,
+    };
 
-    // start the 'intro' transission
-    state.transition.start(null, state.render_texture.texture);
+    state.gameplay_scene.transition.start(null, state.gameplay_scene.render_texture.texture);
+
+    rl.setExitKey(.backspace);
 
     rl.setShaderValue(shader, rl.getShaderLocation(shader, "size"), &rl.Vector2{ .x = RENDER_WIDTH, .y = RENDER_HEIGHT }, .vec2);
     while (!rl.windowShouldClose()) {
-        const frametime = rl.getFrameTime();
-        try state.update(frametime);
         state.draw();
+        try state.update();
     }
 }
