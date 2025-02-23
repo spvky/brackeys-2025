@@ -17,7 +17,12 @@ pub const PlayerActionState = union(PlayerActionStateTags) {
     stunned: Timer,
 };
 
-pub const PlayerHeldItem = union(items.Item) { none, rock: *items.ItemPickup, key: *items.ItemPickup, relic: *items.ItemPickup };
+pub const PlayerHeldItem = union(items.Item) {
+    none,
+    rock: *items.ItemPickup,
+    key: *items.ItemPickup,
+    relic: *items.ItemPickup,
+};
 
 pub const StunStar = struct {
     position: rl.Vector2,

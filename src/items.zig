@@ -62,7 +62,7 @@ pub const ItemPickup = struct {
         return self.position.add(.{ .x = 8, .y = 8 });
     }
 
-    pub fn draw(self: Self, ui_assets: UiAssets, camera_offset: rl.Vector2, level_index: usize) void {
+    pub fn draw(self: Self, ui_assets: UiAssets, camera_offset: rl.Vector2) void {
         const pos_on_camera = self.position.subtract(camera_offset);
         if (self.state != .held) {
             var scale: f32 = 0.8;
@@ -73,12 +73,7 @@ pub const ItemPickup = struct {
             switch (self.item_type) {
                 .rock => rl.drawTextureEx(ui_assets.rock, pos_on_camera, 0, scale, rl.Color.white),
                 .key => rl.drawTextureEx(ui_assets.key, pos_on_camera, 0, scale, rl.Color.white),
-                .relic => {
-                    switch (level_index) {
-                        0 => rl.drawTextureEx(ui_assets.relic_1, pos_on_camera, 0, scale, rl.Color.white),
-                        else => {},
-                    }
-                },
+                .relic => rl.drawTextureEx(ui_assets.relic_1, pos_on_camera, 0, scale, rl.Color.white),
                 else => return,
             }
             if (self.state == .dormant) {}
