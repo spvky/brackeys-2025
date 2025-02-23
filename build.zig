@@ -1,9 +1,10 @@
 const std = @import("std");
+const rlz = @import("raylib-zig");
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
@@ -13,7 +14,7 @@ pub fn build(b: *std.Build) void {
     // Standard optimization options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
     // set a preferred release mode, allowing the user to decide how to optimize.
-    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseFast });
+    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseSafe });
 
     const raylib_dep = b.dependency("raylib-zig", .{
         .target = target,
@@ -30,6 +31,26 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
+    if (target.query.os_tag == .emscripten) {
+        const exe_lib = try rlz.emcc.compileForEmscripten(b, "brackeys-2025", "src/main.zig", target, optimize);
+
+        exe_lib.linkLibrary(raylib_artifact);
+        exe_lib.root_module.addImport("raylib", raylib);
+
+        // Note that raylib itself is not actually added to the exe_lib output file, so it also needs to be linked with emscripten.
+        const link_step = try rlz.emcc.linkWithEmscripten(b, &[_]*std.Build.Step.Compile{ exe_lib, raylib_artifact });
+        //this lets your program access files like "resources/my-image.png":
+        link_step.addArg("--embed-file");
+        link_step.addArg("assets/");
+
+        b.getInstallStep().dependOn(&link_step.step);
+        const run_step = try rlz.emcc.emscriptenRunStep(b);
+        run_step.step.dependOn(&link_step.step);
+        const run_option = b.step("run", "Run brackeys-2025");
+        run_option.dependOn(&run_step.step);
+        return;
+    }
 
     exe.linkLibrary(raylib_artifact);
     exe.root_module.addImport("raylib", raylib);

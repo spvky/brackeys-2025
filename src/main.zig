@@ -19,6 +19,8 @@ const MENU_HEIGHT: i32 = 180;
 var WINDOW_WIDTH: i32 = 1080;
 var WINDOW_HEIGHT: i32 = 720;
 
+const LOBBY_LEVEL = consts.LOBBY_LEVEL;
+
 const Particle = struct {
     rect: rl.Rectangle,
     color: rl.Color,
@@ -30,6 +32,7 @@ const GameState = enum {
     gameplay,
     main_menu,
     pause,
+    gg,
 };
 
 const State = struct {
@@ -37,15 +40,20 @@ const State = struct {
     gameplay_scene: GameplayScene,
     main_menu_scene: MenuScene,
     pause_scene: MenuScene,
+    gg_scene: MenuScene,
     frame_count: u32 = 0,
+
+    pub fn gg(self: *@This()) void {
+        self.state = .gg;
+    }
 
     pub fn update(self: *@This()) !void {
         const dt = rl.getFrameTime();
         self.frame_count = self.frame_count + 1;
         switch (self.state) {
             .gameplay => {
-                self.gameplay_scene.update_player(dt);
-                try self.gameplay_scene.update(dt, self.frame_count);
+                if (!self.gameplay_scene.has_died) self.gameplay_scene.update_player(dt);
+                try self.gameplay_scene.update(dt, self.frame_count, self);
 
                 // SUPER UGLY
                 // should be 'escape' key
@@ -55,7 +63,7 @@ const State = struct {
             },
             .main_menu => {
                 self.main_menu_scene.update();
-                try self.gameplay_scene.update(dt, self.frame_count);
+                try self.gameplay_scene.update(dt, self.frame_count, self);
 
                 // SUPER UGLY
                 // should be a callback inside 'MenuOption' but i couldn't make it work due to comptime
@@ -80,6 +88,17 @@ const State = struct {
                     }
                 }
             },
+            .gg => {
+                self.gg_scene.update();
+                try self.gameplay_scene.update(dt, self.frame_count, self);
+
+                if (rl.isKeyPressed(.e)) {
+                    switch (self.main_menu_scene.selected_index) {
+                        0 => rl.closeWindow(),
+                        else => {},
+                    }
+                }
+            },
         }
     }
 
@@ -98,6 +117,11 @@ const State = struct {
                 self.gameplay_scene.prepare_scene();
                 const gameplay_render_texture = self.gameplay_scene.render_texture;
                 self.pause_scene.draw(gameplay_render_texture.texture);
+            },
+            .gg => {
+                self.gameplay_scene.prepare_scene();
+                const gameplay_render_texture = self.gameplay_scene.render_texture;
+                self.gg_scene.draw(gameplay_render_texture.texture);
             },
         }
     }
@@ -131,12 +155,13 @@ const MenuScene = struct {
 
         const big_size = 20;
         const str_len: i32 = @intCast(rl.textLength(@ptrCast(self.title.ptr)));
-        rl.drawText(@ptrCast(self.title.ptr), MENU_WIDTH / 2 - (big_size * @divTrunc(str_len, 2)), 20, big_size, rl.Color.black);
+        rl.drawText(@ptrCast(self.title.ptr), MENU_WIDTH / 2 - @divTrunc(str_len, 2) * 10, 20, big_size, rl.Color.black);
 
-        const font_size = 8;
+        const font_size: i32 = 8;
         for (self.menu_options, 0..) |option, idx| {
+            const i_idx: i32 = @intCast(idx);
             const x: i32 = @intCast(MENU_WIDTH / 4);
-            const y: i32 = @intCast(MENU_HEIGHT / 4 + idx * font_size * 2);
+            const y: i32 = @intCast(MENU_HEIGHT / 4 + i_idx * font_size * 2);
 
             const clr = if (idx != self.selected_index) rl.Color.black else rl.Color.white;
             const text = if (idx != self.selected_index) rl.textFormat("  %s", .{option.title.ptr}) else rl.textFormat("* %s", .{option.title.ptr});
@@ -184,13 +209,15 @@ const GameplayScene = struct {
     occlusion_shader: rl.Shader,
     camera: Camera,
     level: Level,
+    level_proto: Level,
     transition: transitions.Diamond,
     particles: std.ArrayList(Particle),
 
-    level_index: usize = 2,
+    level_index: usize = LOBBY_LEVEL,
 
     // game contexts
     clicked_portal: ?Portal = null,
+    has_died: bool = false,
     sound_bank: SoundBank,
     ui_assets: UiAssets,
     relic1: bool = false,
@@ -211,7 +238,8 @@ const GameplayScene = struct {
         player.update(state.level.collisions[state.level_index], state.level.items[state.level_index], frametime, cursor_pos, state.sound_bank);
     }
 
-    pub fn update(state: *@This(), frametime: f32, frame_count: u32) !void {
+    /// fucking hate 'game_state' DI here
+    pub fn update(state: *@This(), frametime: f32, frame_count: u32, game_state: *State) !void {
         var player = &state.level.player;
         const target_pos = player.position.subtract(.{ .x = RENDER_WIDTH / 2, .y = RENDER_HEIGHT / 2 });
         var level_bounds = state.level.get_bounds(state.level_index);
@@ -235,6 +263,21 @@ const GameplayScene = struct {
             if (g.velocity.length() > 0) {
                 try try_spawning_particle(state, g.position, g.velocity, frame_count, 20);
             }
+
+            const distance = g.position.distance(player.position);
+            if (!state.has_died and distance <= player.radius * 2) {
+                state.transition.start(state.render_texture.texture, null);
+                state.has_died = true;
+            }
+        }
+
+        if (state.has_died and state.transition.progress == 1) {
+            state.has_died = false;
+            state.level.player = state.level_proto.player;
+            state.level.guards = state.level_proto.guards;
+            state.level.items = state.level_proto.items;
+            state.level_index = LOBBY_LEVEL;
+            state.transition.start(null, state.render_texture.texture);
         }
 
         for (state.level.items[state.level_index]) |*item| {
@@ -293,19 +336,25 @@ const GameplayScene = struct {
                 });
                 const prev_level_index = state.level_index;
                 state.level_index = new_portal.level;
-                if (state.level_index == 2 and player.held_item == .relic) {
+                if (state.level_index == LOBBY_LEVEL and player.held_item == .relic) {
                     switch (prev_level_index) {
-                        0 => {
-                            player.held_item = .none;
-                            state.relic1 = true;
-                        },
-                        1 => {
-                            player.held_item = .none;
-                            state.relic2 = true;
-                        },
                         3 => {
                             player.held_item = .none;
+                            state.relic1 = true;
+                            state.level.relic_holders[0].active = true;
+                            state.level.relic_holders[0].type = 1;
+                        },
+                        0 => {
+                            player.held_item = .none;
+                            state.relic2 = true;
+                            state.level.relic_holders[1].active = true;
+                            state.level.relic_holders[1].type = 2;
+                        },
+                        4 => {
+                            player.held_item = .none;
                             state.relic3 = true;
+                            state.level.relic_holders[2].active = true;
+                            state.level.relic_holders[2].type = 3;
                         },
                         else => {},
                     }
@@ -319,6 +368,11 @@ const GameplayScene = struct {
                     .x = @floatFromInt(lvl.worldX),
                     .y = @floatFromInt(lvl.worldY),
                 };
+
+                if (state.relic1 and state.relic2 and state.relic3) {
+                    std.log.debug("GG", .{});
+                    game_state.gg();
+                }
             }
         }
 
@@ -327,6 +381,11 @@ const GameplayScene = struct {
 
     pub fn prepare_scene(state: @This()) void {
         const player = state.level.player;
+        //const lvl = state.level.ldtk.levels[state.level_index];
+        //const level_offset: rl.Vector2 = .{
+        //    .x = @floatFromInt(lvl.worldX),
+        //    .y = @floatFromInt(lvl.worldY),
+        //};
         // clearing occlusion mask
         state.occlusion_mask.begin();
         rl.clearBackground(rl.Color.white);
@@ -351,21 +410,27 @@ const GameplayScene = struct {
         // Need to draw him normal style
         for (state.level.guards[state.level_index]) |guard| {
             guard.draw(state.camera.offset);
-            const lvl = state.level.ldtk.levels[state.level_index];
-            const level_offset: rl.Vector2 = .{
-                .x = @floatFromInt(lvl.worldX),
-                .y = @floatFromInt(lvl.worldY),
-            };
-            guard.draw_debug(state.camera.offset, level_offset);
+            // guard.draw_debug(state.camera.offset, level_offset);
         }
 
         for (state.level.items[state.level_index]) |*item| {
-            // TODO these do not take into account the level offset
-            // which is honestly really annoying
-            // I am considering just removing the level offset for all objects
-            // and just naively never care for any level but the one the player is currently in
-            // this will need to be revised later though, if multiplayer is on the table
-            item.draw(state.ui_assets, state.camera.offset, state.level_index);
+            item.draw(state.ui_assets, state.camera.offset);
+        }
+
+        if (state.level_index == LOBBY_LEVEL) {
+            for (state.level.relic_holders) |holder| {
+                if (holder.active) {
+                    const asset = switch (holder.type) {
+                        1 => state.ui_assets.relic_1,
+                        2 => state.ui_assets.relic_2,
+                        3 => state.ui_assets.relic_3,
+                        else => state.ui_assets.relic_1,
+                    };
+
+                    const pos_on_camera = holder.position.subtract(state.camera.offset);
+                    rl.drawTextureEx(asset, pos_on_camera, 0, 1, rl.Color.white);
+                }
+            }
         }
 
         state.scene.end();
@@ -455,6 +520,8 @@ pub fn main() !void {
         "assets/shaders/occlusion.fs",
     );
 
+    const level = try Level.init(std.heap.page_allocator);
+    const proto_level = try Level.init(std.heap.page_allocator);
     var state: State = .{
         .gameplay_scene = .{
             .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
@@ -462,7 +529,8 @@ pub fn main() !void {
             .render_texture = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
             .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
             .camera = Camera.init(),
-            .level = try Level.init(std.heap.page_allocator),
+            .level = level,
+            .level_proto = proto_level,
             .particles = std.ArrayList(Particle).init(std.heap.page_allocator),
             .transition = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT),
             .occlusion_shader = shader,
@@ -475,13 +543,21 @@ pub fn main() !void {
             .title = TITLE,
         },
         .pause_scene = .{
-            .menu_options = &.{ .{ .title = "START GAME" }, .{ .title = "QUIT" } },
+            .menu_options = &.{ .{ .title = "RESUME" }, .{ .title = "QUIT" } },
             .render_texture = try rl.loadRenderTexture(MENU_WIDTH, MENU_HEIGHT),
             .title = "PAUSED",
+        },
+        .gg_scene = .{
+            .menu_options = &.{.{ .title = "QUIT" }},
+            .render_texture = try rl.loadRenderTexture(MENU_WIDTH, MENU_HEIGHT),
+            .title = "Thanks for playing!",
         },
         .state = .main_menu,
     };
 
+    state.gameplay_scene.level.relic_holders[2].active = true;
+    state.gameplay_scene.level.relic_holders[2].type = 3;
+    state.gameplay_scene.relic3 = true;
     state.gameplay_scene.transition.start(null, state.gameplay_scene.render_texture.texture);
 
     rl.setExitKey(.backspace);

@@ -4,6 +4,10 @@ const Ldtk = @import("ldtk.zig").Ldtk;
 const character = @import("character.zig");
 const ItemPickup = @import("items.zig").ItemPickup;
 const Camera = @import("camera.zig").Camera;
+const consts = @import("consts.zig");
+const UIAsset = @import("ui.zig").UiAssets;
+
+const LOBBY_LEVEL = consts.LOBBY_LEVEL;
 
 pub const Portal = struct {
     position: rl.Vector2,
@@ -11,6 +15,12 @@ pub const Portal = struct {
     height: u32,
     other: []const u8,
     level: usize,
+};
+
+const RelicHolder = struct {
+    active: bool = false,
+    position: rl.Vector2,
+    type: u32 = 0,
 };
 
 pub const Level = struct {
@@ -27,6 +37,8 @@ pub const Level = struct {
     // [level][y][x]bool
     navigation_maps: [][][]bool,
 
+    relic_holders: []RelicHolder,
+
     // [Iid]
     portals: std.StringHashMap(Portal),
 
@@ -37,6 +49,7 @@ pub const Level = struct {
         var guards = std.ArrayList([]character.Guard).init(allocator);
         var items = std.ArrayList([]ItemPickup).init(allocator);
         var navigation_maps = std.ArrayList([][]bool).init(allocator);
+        var relic_holders = std.ArrayList(RelicHolder).init(allocator);
 
         //TODO: REFACTOR
         var portals = std.StringHashMap(Portal).init(allocator);
@@ -84,6 +97,7 @@ pub const Level = struct {
                             Key,
                             Relic,
                             Portal,
+                            Relic_Holder,
                         };
                         const case = std.meta.stringToEnum(Case, e.__identifier) orelse unreachable;
 
@@ -124,6 +138,9 @@ pub const Level = struct {
                                     .level = level_index, // naive
                                 });
                             },
+                            .Relic_Holder => {
+                                try relic_holders.append(.{ .position = position });
+                            },
                         }
                     }
                 }
@@ -148,6 +165,7 @@ pub const Level = struct {
             .collisions = try collisions.toOwnedSlice(),
             .guards = try guards.toOwnedSlice(),
             .items = try items.toOwnedSlice(),
+            .relic_holders = try relic_holders.toOwnedSlice(),
             .player = player,
             .navigation_maps = try navigation_maps.toOwnedSlice(),
             .portals = portals,

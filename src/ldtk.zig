@@ -1,7 +1,5 @@
 const std = @import("std");
 
-const cwd = std.fs.cwd();
-
 const Rules = struct {
     active: bool,
     size: u32,
@@ -130,6 +128,7 @@ pub const Ldtk = struct {
     levels: []Level,
 
     pub fn init(path: []const u8) !@This() {
+        const cwd = std.fs.cwd();
         const allocator = std.heap.page_allocator;
         const file = try cwd.openFile(path, .{});
         const buf = try file.readToEndAlloc(allocator, 200_000_000);
