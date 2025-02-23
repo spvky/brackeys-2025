@@ -45,6 +45,9 @@ const State = struct {
     clicked_portal: ?Portal = null,
     sound_bank: SoundBank,
     ui_assets: UiAssets,
+    relic1: bool = false,
+    relic2: bool = false,
+    relic3: bool = false,
 
     pub fn update(state: *@This(), frametime: f32) !void {
         var player = &state.level.player;
@@ -134,7 +137,25 @@ const State = struct {
                     .x = @floatFromInt(new_portal.width / 2),
                     .y = @floatFromInt(new_portal.height / 2),
                 });
+                const prev_level_index = state.level_index;
                 state.level_index = new_portal.level;
+                if (state.level_index == 2 and player.held_item == .relic) {
+                    switch (prev_level_index) {
+                        0 => {
+                            player.held_item = .none;
+                            state.relic1 = true;
+                        },
+                        1 => {
+                            player.held_item = .none;
+                            state.relic2 = true;
+                        },
+                        3 => {
+                            player.held_item = .none;
+                            state.relic3 = true;
+                        },
+                        else => {},
+                    }
+                }
                 state.clicked_portal = null;
                 // start the 'fade in' transition
                 state.transition.start(null, state.render_texture.texture);

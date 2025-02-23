@@ -8,6 +8,8 @@ pub const UiAssets = struct {
     rock: rl.Texture,
     key: rl.Texture,
     relic_1: rl.Texture,
+    relic_2: rl.Texture,
+    relic_3: rl.Texture,
 
     pub fn init() !@This() {
         return .{
@@ -15,6 +17,8 @@ pub const UiAssets = struct {
             .rock = try rl.loadTexture("assets/ui/rock.png"),
             .key = try rl.loadTexture("assets/ui/key.png"),
             .relic_1 = try rl.loadTexture("assets/ui/relic_1.png"),
+            .relic_2 = try rl.loadTexture("assets/ui/relic_2.png"),
+            .relic_3 = try rl.loadTexture("assets/ui/relic_3.png"),
         };
     }
 };
@@ -34,6 +38,8 @@ pub const UiState = struct {
             .relic => {
                 switch (level_index) {
                     0 => rl.drawTextureEx(ui_assets.relic_1, .{ .x = 5, .y = 20 }, 0, 4.5, rl.Color.white),
+                    1 => rl.drawTextureEx(ui_assets.relic_2, .{ .x = 5, .y = 20 }, 0, 4.5, rl.Color.white),
+                    3 => rl.drawTextureEx(ui_assets.relic_3, .{ .x = 5, .y = 20 }, 0, 4.5, rl.Color.white),
                     else => {},
                 }
             },
