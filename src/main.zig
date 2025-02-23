@@ -157,10 +157,11 @@ const MenuScene = struct {
         const str_len: i32 = @intCast(rl.textLength(@ptrCast(self.title.ptr)));
         rl.drawText(@ptrCast(self.title.ptr), MENU_WIDTH / 2 - @divTrunc(str_len, 2) * 10, 20, big_size, rl.Color.black);
 
-        const font_size = 8;
+        const font_size: i32 = 8;
         for (self.menu_options, 0..) |option, idx| {
+            const i_idx: i32 = @intCast(idx);
             const x: i32 = @intCast(MENU_WIDTH / 4);
-            const y: i32 = @intCast(MENU_HEIGHT / 4 + idx * font_size * 2);
+            const y: i32 = @intCast(MENU_HEIGHT / 4 + i_idx * font_size * 2);
 
             const clr = if (idx != self.selected_index) rl.Color.black else rl.Color.white;
             const text = if (idx != self.selected_index) rl.textFormat("  %s", .{option.title.ptr}) else rl.textFormat("* %s", .{option.title.ptr});
