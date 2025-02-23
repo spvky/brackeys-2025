@@ -521,6 +521,7 @@ pub fn main() !void {
     );
 
     const level = try Level.init(std.heap.page_allocator);
+    const proto_level = try Level.init(std.heap.page_allocator);
     var state: State = .{
         .gameplay_scene = .{
             .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
@@ -529,7 +530,7 @@ pub fn main() !void {
             .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
             .camera = Camera.init(),
             .level = level,
-            .level_proto = level,
+            .level_proto = proto_level,
             .particles = std.ArrayList(Particle).init(std.heap.page_allocator),
             .transition = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT),
             .occlusion_shader = shader,
