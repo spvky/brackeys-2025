@@ -144,7 +144,14 @@ pub const Player = struct {
             .rock => |*item| {
                 item.*.position = self.position;
                 const throw_direction = self.cursor_position.subtract(self.position).normalize();
-                const throw_velocity = throw_direction.scale(20);
+                const throw_velocity = throw_direction.scale(2);
+                item.*.state = items.ItemState{ .moving = .{ .velocity = throw_velocity, .ricochets = 0 } };
+                self.held_item = .none;
+            },
+            .key => |*item| {
+                item.*.position = self.position;
+                const throw_direction = self.cursor_position.subtract(self.position).normalize();
+                const throw_velocity = throw_direction.scale(2);
                 item.*.state = items.ItemState{ .moving = .{ .velocity = throw_velocity, .ricochets = 0 } };
                 self.held_item = .none;
             },
@@ -200,7 +207,7 @@ pub const Player = struct {
                                 moving_item.*.velocity = moving_item.velocity.scale(-1);
                                 moving_item.*.ricochets += 1;
                                 self.action_state = .{ .stunned = Timer.init(0.5) };
-                                rl.playSound(sound_bank.rock);
+                                item.hit_sound(sound_bank);
                             }
                         }
                     },
@@ -328,7 +335,7 @@ pub const Guard = struct {
                                 moving_item.*.velocity = moving_item.velocity.scale(-1);
                                 moving_item.*.ricochets += 1;
                                 self.state = .{ .stunned = Timer.init(1.5) };
-                                rl.playSound(sound_bank.rock);
+                                item.hit_sound(sound_bank);
                             }
                         }
                     },

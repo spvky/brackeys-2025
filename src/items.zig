@@ -34,7 +34,7 @@ pub const ItemPickup = struct {
                     }
                     if (ricocheted) {
                         ricochets = ricochets + 1;
-                        rl.playSound(sound_bank.rock);
+                        self.hit_sound(sound_bank);
                     }
                 }
                 self.position = self.position.add(velocity);
@@ -45,6 +45,14 @@ pub const ItemPickup = struct {
                     self.state = .{ .moving = .{ .velocity = velocity, .ricochets = ricochets } };
                 }
             },
+            else => {},
+        }
+    }
+
+    pub fn hit_sound(self: Self, sound_bank: SoundBank) void {
+        switch (self.item_type) {
+            .rock => rl.playSound(sound_bank.rock),
+            .key => rl.playSound(sound_bank.key),
             else => {},
         }
     }
