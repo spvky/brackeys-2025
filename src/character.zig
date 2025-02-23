@@ -42,6 +42,7 @@ pub const Player = struct {
     facing: rl.Vector2 = .{ .x = 0, .y = 1 },
     color: rl.Color = rl.Color.sky_blue,
     animation_t: f32 = 0,
+    over_item: items.Item = .none,
 
     const Self = @This();
 
@@ -91,6 +92,13 @@ pub const Player = struct {
     pub fn throw_item(self: *Self, frametime: f32) void {
         switch (self.held_item) {
             .rock => |*item| {
+                item.*.position = self.position;
+                const throw_direction = self.cursor_position.subtract(self.position).normalize();
+                const throw_velocity = throw_direction.scale(frametime * self.throw_strength() * 2.5);
+                item.*.state = items.ItemState{ .moving = .{ .velocity = throw_velocity, .ricochets = 0 } };
+                self.held_item = .none;
+            },
+            .key => |*item| {
                 item.*.position = self.position;
                 const throw_direction = self.cursor_position.subtract(self.position).normalize();
                 const throw_velocity = throw_direction.scale(frametime * self.throw_strength() * 2.5);
@@ -160,17 +168,28 @@ pub const Player = struct {
         }
 
         // Item Interactions
+        var item_collision_count: u8 = 0;
         for (items_in_scene) |*item| {
-            if (rl.checkCollisionCircles(self.position, self.radius, item.position, item.pickup_radius())) {
+            if (rl.checkCollisionCircles(self.position, self.radius, item.center(), item.pickup_radius())) {
+                item_collision_count += 1;
                 switch (item.state) {
                     // Pickup items logic
                     .dormant => {
+                        self.over_item = item.item_type;
                         if (rl.isKeyPressed(.e)) {
                             if (self.held_item != .none) {
                                 self.drop_current_item();
                             }
                             item.pickup();
-                            self.held_item = .{ .rock = item };
+                            switch (item.item_type) {
+                                .rock => {
+                                    self.held_item = .{ .rock = item };
+                                },
+                                .key => {
+                                    self.held_item = .{ .key = item };
+                                },
+                                else => {},
+                            }
                         }
                     },
                     // Getting hit by a ricochet
@@ -188,6 +207,9 @@ pub const Player = struct {
                     else => {},
                 }
             }
+        }
+        if (item_collision_count == 0) {
+            self.over_item = .none;
         }
         self.position.x += self.velocity.x;
         self.position.y += self.velocity.y;

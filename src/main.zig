@@ -7,6 +7,7 @@ const Level = @import("level.zig").Level;
 const Portal = @import("level.zig").Portal;
 const UiState = @import("ui.zig").UiState;
 const SoundBank = @import("audio.zig").SoundBank;
+const UiAssets = @import("ui.zig").UiAssets;
 const consts = @import("consts.zig");
 const RENDER_WIDTH = consts.RENDER_WIDTH;
 const RENDER_HEIGHT = consts.RENDER_HEIGHT;
@@ -42,8 +43,8 @@ const State = struct {
 
     // game contexts
     clicked_portal: ?Portal = null,
-    ui_state: UiState,
     sound_bank: SoundBank,
+    ui_assets: UiAssets,
 
     pub fn update(state: *@This(), frametime: f32) !void {
         var player = &state.level.player;
@@ -191,7 +192,7 @@ const State = struct {
             // I am considering just removing the level offset for all objects
             // and just naively never care for any level but the one the player is currently in
             // this will need to be revised later though, if multiplayer is on the table
-            item.draw(state.camera.offset);
+            item.draw(state.ui_assets, state.camera.offset);
         }
 
         state.scene.end();
@@ -233,7 +234,7 @@ const State = struct {
 
         // Ui
         rl.drawFPS(0, 0);
-        state.ui_state.draw(player);
+        UiState.draw(player, state.ui_assets);
         rl.endDrawing();
     }
 };

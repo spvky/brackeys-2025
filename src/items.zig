@@ -1,5 +1,7 @@
+const std = @import("std");
 const rl = @import("raylib");
 const SoundBank = @import("audio.zig").SoundBank;
+const UiAssets = @import("ui.zig").UiAssets;
 
 pub const ItemPickup = struct {
     item_type: Item,
@@ -13,13 +15,14 @@ pub const ItemPickup = struct {
         collisions: []rl.Rectangle,
         sound_bank: SoundBank,
     ) void {
+        const position = self.center();
         switch (self.state) {
             .moving => |*moving_item| {
                 var velocity = moving_item.velocity;
                 var ricochets: u8 = moving_item.ricochets;
                 for (collisions) |collision| {
-                    const projected_x = self.position.add(.{ .x = velocity.x, .y = 0 });
-                    const projected_y = self.position.add(.{ .x = 0, .y = velocity.y });
+                    const projected_x = position.add(.{ .x = velocity.x, .y = 0 });
+                    const projected_y = position.add(.{ .x = 0, .y = velocity.y });
                     var ricocheted = false;
                     if (rl.checkCollisionCircleRec(projected_x, 3, collision)) {
                         velocity.x *= -1;
@@ -46,13 +49,24 @@ pub const ItemPickup = struct {
         }
     }
 
-    pub fn draw(self: Self, camera_offset: rl.Vector2) void {
+    pub fn center(self: Self) rl.Vector2 {
+        return self.position.add(.{ .x = 8, .y = 8 });
+    }
+
+    pub fn draw(self: Self, ui_assets: UiAssets, camera_offset: rl.Vector2) void {
         const pos_on_camera = self.position.subtract(camera_offset);
         if (self.state != .held) {
+            var scale: f32 = 0.8;
+            if (self.state == .dormant) {
+                const f: f32 = @floatCast(rl.getTime() * 4);
+                scale = 0.8 + (std.math.sin(f) / 10);
+            }
             switch (self.item_type) {
-                .rock => rl.drawCircleV(pos_on_camera, 3.0, rl.Color.light_gray),
+                .rock => rl.drawTextureEx(ui_assets.rock, pos_on_camera, 0, scale, rl.Color.white),
+                .key => rl.drawTextureEx(ui_assets.key, pos_on_camera, 0, scale, rl.Color.white),
                 else => return,
             }
+            if (self.state == .dormant) {}
         }
     }
 
@@ -62,8 +76,8 @@ pub const ItemPickup = struct {
 
     pub fn pickup_radius(self: *Self) f32 {
         switch (self.item_type) {
-            .rock => return 20,
-            .key => return 20,
+            .rock => return 3,
+            .key => return 3,
             .none => return 0,
         }
     }
@@ -87,11 +101,4 @@ pub const Item = enum {
     none,
     rock,
     key,
-
-    pub fn is_throwable(self: @This()) bool {
-        switch (self) {
-            .rock => return true,
-            else => return false,
-        }
-    }
 };
