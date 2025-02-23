@@ -278,7 +278,7 @@ pub fn main() !void {
         "assets/shaders/occlusion.fs",
     );
 
-    var state: State = .{ .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .render_texture = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .camera = Camera.init(), .level = try Level.init(std.heap.page_allocator), .particles = std.ArrayList(Particle).init(std.heap.page_allocator), .transition = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_shader = shader, .ui_state = try UiState.init(), .sound_bank = try SoundBank.init() };
+    var state: State = .{ .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .render_texture = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .camera = Camera.init(), .level = try Level.init(std.heap.page_allocator), .particles = std.ArrayList(Particle).init(std.heap.page_allocator), .transition = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_shader = shader, .ui_assets = try UiAssets.init(), .sound_bank = try SoundBank.init() };
 
     // start the 'intro' transission
     state.transition.start(null, state.render_texture.texture);
