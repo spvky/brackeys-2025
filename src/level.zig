@@ -82,6 +82,7 @@ pub const Level = struct {
                             Player,
                             Rock,
                             Key,
+                            Relic,
                             Portal,
                         };
                         const case = std.meta.stringToEnum(Case, e.__identifier) orelse unreachable;
@@ -109,6 +110,9 @@ pub const Level = struct {
                             },
                             .Key => {
                                 try level_items.append(.{ .item_type = .key, .position = position });
+                            },
+                            .Relic => {
+                                try level_items.append(.{ .item_type = .relic, .position = position });
                             },
                             .Portal => {
                                 const field_instance_value = try e.fieldInstances[0].parse_value();

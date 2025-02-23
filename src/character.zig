@@ -17,7 +17,7 @@ pub const PlayerActionState = union(PlayerActionStateTags) {
     stunned: Timer,
 };
 
-pub const PlayerHeldItem = union(items.Item) { none, rock: *items.ItemPickup, key: *items.ItemPickup };
+pub const PlayerHeldItem = union(items.Item) { none, rock: *items.ItemPickup, key: *items.ItemPickup, relic: *items.ItemPickup };
 
 pub const StunStar = struct {
     position: rl.Vector2,
@@ -105,6 +105,13 @@ pub const Player = struct {
                 item.*.state = items.ItemState{ .moving = .{ .velocity = throw_velocity, .ricochets = 0 } };
                 self.held_item = .none;
             },
+            .relic => |*item| {
+                item.*.position = self.position;
+                const throw_direction = self.cursor_position.subtract(self.position).normalize();
+                const throw_velocity = throw_direction.scale(frametime * self.throw_strength() * 2.5);
+                item.*.state = items.ItemState{ .moving = .{ .velocity = throw_velocity, .ricochets = 0 } };
+                self.held_item = .none;
+            },
             else => {},
         }
     }
@@ -155,6 +162,13 @@ pub const Player = struct {
                 item.*.state = items.ItemState{ .moving = .{ .velocity = throw_velocity, .ricochets = 0 } };
                 self.held_item = .none;
             },
+            .relic => |*item| {
+                item.*.position = self.position;
+                const throw_direction = self.cursor_position.subtract(self.position).normalize();
+                const throw_velocity = throw_direction.scale(2);
+                item.*.state = items.ItemState{ .moving = .{ .velocity = throw_velocity, .ricochets = 0 } };
+                self.held_item = .none;
+            },
             else => {},
         }
     }
@@ -194,6 +208,9 @@ pub const Player = struct {
                                 },
                                 .key => {
                                     self.held_item = .{ .key = item };
+                                },
+                                .relic => {
+                                    self.held_item = .{ .relic = item };
                                 },
                                 else => {},
                             }

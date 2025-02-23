@@ -7,18 +7,20 @@ pub const UiAssets = struct {
     held_item: rl.Texture,
     rock: rl.Texture,
     key: rl.Texture,
+    relic_1: rl.Texture,
 
     pub fn init() !@This() {
         return .{
             .held_item = try rl.loadTexture("assets/ui/held_item.png"),
             .rock = try rl.loadTexture("assets/ui/rock.png"),
             .key = try rl.loadTexture("assets/ui/key.png"),
+            .relic_1 = try rl.loadTexture("assets/ui/relic_1.png"),
         };
     }
 };
 
 pub const UiState = struct {
-    pub fn draw(player: Player, ui_assets: UiAssets) void {
+    pub fn draw(player: Player, ui_assets: UiAssets, level_index: usize) void {
         rl.drawTextureEx(ui_assets.held_item, .{ .x = 5, .y = 20 }, 0, 4.5, rl.Color.white);
 
         UiState.draw_pickup_text(player);
@@ -28,6 +30,12 @@ pub const UiState = struct {
             },
             .key => {
                 rl.drawTextureEx(ui_assets.key, .{ .x = 5, .y = 20 }, 0, 4.5, rl.Color.white);
+            },
+            .relic => {
+                switch (level_index) {
+                    0 => rl.drawTextureEx(ui_assets.relic_1, .{ .x = 5, .y = 20 }, 0, 4.5, rl.Color.white),
+                    else => {},
+                }
             },
             else => {},
         }

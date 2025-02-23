@@ -192,7 +192,7 @@ const State = struct {
             // I am considering just removing the level offset for all objects
             // and just naively never care for any level but the one the player is currently in
             // this will need to be revised later though, if multiplayer is on the table
-            item.draw(state.ui_assets, state.camera.offset);
+            item.draw(state.ui_assets, state.camera.offset, state.level_index);
         }
 
         state.scene.end();
@@ -234,7 +234,7 @@ const State = struct {
 
         // Ui
         rl.drawFPS(0, 0);
-        UiState.draw(player, state.ui_assets);
+        UiState.draw(player, state.ui_assets, state.level_index);
         rl.endDrawing();
     }
 };

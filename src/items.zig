@@ -53,6 +53,7 @@ pub const ItemPickup = struct {
         switch (self.item_type) {
             .rock => rl.playSound(sound_bank.rock),
             .key => rl.playSound(sound_bank.key),
+            .relic => rl.playSound(sound_bank.relic),
             else => {},
         }
     }
@@ -61,7 +62,7 @@ pub const ItemPickup = struct {
         return self.position.add(.{ .x = 8, .y = 8 });
     }
 
-    pub fn draw(self: Self, ui_assets: UiAssets, camera_offset: rl.Vector2) void {
+    pub fn draw(self: Self, ui_assets: UiAssets, camera_offset: rl.Vector2, level_index: usize) void {
         const pos_on_camera = self.position.subtract(camera_offset);
         if (self.state != .held) {
             var scale: f32 = 0.8;
@@ -72,6 +73,12 @@ pub const ItemPickup = struct {
             switch (self.item_type) {
                 .rock => rl.drawTextureEx(ui_assets.rock, pos_on_camera, 0, scale, rl.Color.white),
                 .key => rl.drawTextureEx(ui_assets.key, pos_on_camera, 0, scale, rl.Color.white),
+                .relic => {
+                    switch (level_index) {
+                        0 => rl.drawTextureEx(ui_assets.relic_1, pos_on_camera, 0, scale, rl.Color.white),
+                        else => {},
+                    }
+                },
                 else => return,
             }
             if (self.state == .dormant) {}
@@ -86,6 +93,7 @@ pub const ItemPickup = struct {
         switch (self.item_type) {
             .rock => return 3,
             .key => return 3,
+            .relic => return 3,
             .none => return 0,
         }
     }
@@ -109,4 +117,5 @@ pub const Item = enum {
     none,
     rock,
     key,
+    relic,
 };
