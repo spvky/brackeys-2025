@@ -39,7 +39,7 @@ const State = struct {
     particles: std.ArrayList(Particle),
     frame_count: u32 = 0,
 
-    level_index: usize = 0,
+    level_index: usize = 2,
 
     // game contexts
     clicked_portal: ?Portal = null,
