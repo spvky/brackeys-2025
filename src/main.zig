@@ -6,6 +6,7 @@ const Camera = @import("camera.zig").Camera;
 const Level = @import("level.zig").Level;
 const Portal = @import("level.zig").Portal;
 const UiState = @import("ui.zig").UiState;
+const SoundBank = @import("audio.zig").SoundBank;
 const consts = @import("consts.zig");
 const RENDER_WIDTH = consts.RENDER_WIDTH;
 const RENDER_HEIGHT = consts.RENDER_HEIGHT;
@@ -42,6 +43,7 @@ const State = struct {
     // game contexts
     clicked_portal: ?Portal = null,
     ui_state: UiState,
+    sound_bank: SoundBank,
 
     pub fn update(state: *@This(), frametime: f32) !void {
         var player = &state.level.player;
@@ -60,7 +62,7 @@ const State = struct {
         };
         const cursor_pos = raw_cursor_position.multiply(render_ratio).add(state.camera.offset);
 
-        player.update(state.level.collisions[state.level_index], state.level.items[state.level_index], frametime, cursor_pos);
+        player.update(state.level.collisions[state.level_index], state.level.items[state.level_index], frametime, cursor_pos, state.sound_bank);
         if (player.velocity.length() > 0) {
             try try_spawning_particle(state, player.position, player.velocity, 10);
         }
@@ -71,14 +73,14 @@ const State = struct {
                 .x = @floatFromInt(lvl.worldX),
                 .y = @floatFromInt(lvl.worldY),
             };
-            g.update(player.*, state.level.items[state.level_index], state.level.collisions[state.level_index], state.level.navigation_maps[state.level_index], level_offset, frametime);
+            g.update(player.*, state.level.items[state.level_index], state.level.collisions[state.level_index], state.level.navigation_maps[state.level_index], level_offset, frametime, state.sound_bank);
             if (g.velocity.length() > 0) {
                 try try_spawning_particle(state, g.position, g.velocity, 20);
             }
         }
 
         for (state.level.items[state.level_index]) |*item| {
-            item.update(state.level.collisions[state.level_index]);
+            item.update(state.level.collisions[state.level_index], state.sound_bank);
         }
 
         var i: usize = state.particles.items.len;
@@ -261,6 +263,8 @@ pub fn main() !void {
     rl.setConfigFlags(.{ .window_resizable = true, .borderless_windowed_mode = true });
 
     rl.initWindow(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE);
+    rl.initAudioDevice();
+    defer rl.closeAudioDevice();
     const monitor = rl.getCurrentMonitor();
     WINDOW_WIDTH = rl.getMonitorWidth(monitor);
     WINDOW_HEIGHT = rl.getMonitorHeight(monitor);
@@ -273,7 +277,7 @@ pub fn main() !void {
         "assets/shaders/occlusion.fs",
     );
 
-    var state: State = .{ .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .render_texture = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .camera = Camera.init(), .level = try Level.init(std.heap.page_allocator), .particles = std.ArrayList(Particle).init(std.heap.page_allocator), .transition = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_shader = shader, .ui_state = try UiState.init() };
+    var state: State = .{ .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_mask = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .render_texture = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT), .camera = Camera.init(), .level = try Level.init(std.heap.page_allocator), .particles = std.ArrayList(Particle).init(std.heap.page_allocator), .transition = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT), .occlusion_shader = shader, .ui_state = try UiState.init(), .sound_bank = try SoundBank.init() };
 
     // start the 'intro' transission
     state.transition.start(null, state.render_texture.texture);

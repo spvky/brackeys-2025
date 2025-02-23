@@ -3,6 +3,7 @@ const rl = @import("raylib");
 const util = @import("utils.zig");
 const items = @import("items.zig");
 const Path = @import("path.zig").Path;
+const SoundBank = @import("audio.zig").SoundBank;
 
 pub const PlayerActionStateTags = enum {
     normal,
@@ -143,7 +144,7 @@ pub const Player = struct {
         }
     }
 
-    pub fn update(self: *Self, collisions: []rl.Rectangle, items_in_scene: []items.ItemPickup, frametime: f32, cursor_position: rl.Vector2) void {
+    pub fn update(self: *Self, collisions: []rl.Rectangle, items_in_scene: []items.ItemPickup, frametime: f32, cursor_position: rl.Vector2, sound_bank: SoundBank) void {
         self.cursor_position = cursor_position;
         self.calculate_velocity(frametime);
         self.handle_action_state(frametime);
@@ -180,6 +181,7 @@ pub const Player = struct {
                                 moving_item.*.velocity = moving_item.velocity.scale(-1);
                                 moving_item.*.ricochets += 1;
                                 self.action_state = .{ .stunned = Timer.init(0.5) };
+                                rl.playSound(sound_bank.rock);
                             }
                         }
                     },
@@ -286,7 +288,7 @@ pub const Guard = struct {
         self.patrol_path.deinit();
     }
 
-    pub fn update(self: *Self, player: Player, items_in_scene: []items.ItemPickup, occlusions: []rl.Rectangle, navmap: [][]bool, level_offset: rl.Vector2, frametime: f32) void {
+    pub fn update(self: *Self, player: Player, items_in_scene: []items.ItemPickup, occlusions: []rl.Rectangle, navmap: [][]bool, level_offset: rl.Vector2, frametime: f32, sound_bank: SoundBank) void {
         self.check_player_spotted(player, occlusions);
         self.wait_timer.update(frametime);
         self.turning_timer.update(frametime);
@@ -304,6 +306,7 @@ pub const Guard = struct {
                                 moving_item.*.velocity = moving_item.velocity.scale(-1);
                                 moving_item.*.ricochets += 1;
                                 self.state = .{ .stunned = Timer.init(1.5) };
+                                rl.playSound(sound_bank.rock);
                             }
                         }
                     },

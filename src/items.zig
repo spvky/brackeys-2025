@@ -1,4 +1,5 @@
 const rl = @import("raylib");
+const SoundBank = @import("audio.zig").SoundBank;
 
 pub const ItemPickup = struct {
     item_type: Item,
@@ -7,7 +8,11 @@ pub const ItemPickup = struct {
 
     const Self = @This();
 
-    pub fn update(self: *Self, collisions: []rl.Rectangle) void {
+    pub fn update(
+        self: *Self,
+        collisions: []rl.Rectangle,
+        sound_bank: SoundBank,
+    ) void {
         switch (self.state) {
             .moving => |*moving_item| {
                 var velocity = moving_item.velocity;
@@ -26,6 +31,7 @@ pub const ItemPickup = struct {
                     }
                     if (ricocheted) {
                         ricochets = ricochets + 1;
+                        rl.playSound(sound_bank.rock);
                     }
                 }
                 self.position = self.position.add(velocity);
