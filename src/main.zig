@@ -184,6 +184,7 @@ const GameplayScene = struct {
     occlusion_shader: rl.Shader,
     camera: Camera,
     level: Level,
+    level_proto: Level,
     transition: transitions.Diamond,
     particles: std.ArrayList(Particle),
 
@@ -191,6 +192,7 @@ const GameplayScene = struct {
 
     // game contexts
     clicked_portal: ?Portal = null,
+    has_died: bool = false,
     sound_bank: SoundBank,
     ui_assets: UiAssets,
     relic1: bool = false,
@@ -235,6 +237,21 @@ const GameplayScene = struct {
             if (g.velocity.length() > 0) {
                 try try_spawning_particle(state, g.position, g.velocity, frame_count, 20);
             }
+
+            const distance = g.position.distance(player.position);
+            if (!state.has_died and distance <= player.radius * 2) {
+                state.transition.start(state.render_texture.texture, null);
+                state.has_died = true;
+            }
+        }
+
+        if (state.has_died and state.transition.progress == 1) {
+            state.has_died = false;
+            state.level.player = state.level_proto.player;
+            state.level.guards = state.level_proto.guards;
+            state.level.items = state.level_proto.items;
+            state.level_index = 2;
+            state.transition.start(null, state.render_texture.texture);
         }
 
         for (state.level.items[state.level_index]) |*item| {
@@ -455,6 +472,7 @@ pub fn main() !void {
         "assets/shaders/occlusion.fs",
     );
 
+    const level = try Level.init(std.heap.page_allocator);
     var state: State = .{
         .gameplay_scene = .{
             .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
@@ -462,7 +480,8 @@ pub fn main() !void {
             .render_texture = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
             .invisible_scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
             .camera = Camera.init(),
-            .level = try Level.init(std.heap.page_allocator),
+            .level = level,
+            .level_proto = level,
             .particles = std.ArrayList(Particle).init(std.heap.page_allocator),
             .transition = try transitions.Diamond.init(RENDER_WIDTH, RENDER_HEIGHT),
             .occlusion_shader = shader,
@@ -475,7 +494,7 @@ pub fn main() !void {
             .title = TITLE,
         },
         .pause_scene = .{
-            .menu_options = &.{ .{ .title = "START GAME" }, .{ .title = "QUIT" } },
+            .menu_options = &.{ .{ .title = "RESUME" }, .{ .title = "QUIT" } },
             .render_texture = try rl.loadRenderTexture(MENU_WIDTH, MENU_HEIGHT),
             .title = "PAUSED",
         },

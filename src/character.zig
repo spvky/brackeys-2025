@@ -456,7 +456,7 @@ pub const Guard = struct {
                         self.chase_index = self.chase_index + 1;
                         self.position = target_position;
 
-                        if (self.last_sighted.distance(end_position) >= 16) {
+                        if (self.last_sighted.distance(end_position) >= 16 or self.position.distance(player.position) < 16) {
                             const path = Path.find(
                                 std.heap.page_allocator,
                                 navmap,
