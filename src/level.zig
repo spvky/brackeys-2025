@@ -1,4 +1,5 @@
 const std = @import("std");
+const World = @import("world.zig").World;
 const rl = @import("raylib");
 const Ldtk = @import("ldtk.zig").Ldtk;
 const character = @import("character.zig");
@@ -42,7 +43,8 @@ pub const Level = struct {
     // [Iid]
     portals: std.StringHashMap(Portal),
 
-    pub fn init(allocator: std.mem.Allocator) !Level {
+    pub fn init(allocator: std.mem.Allocator, world: *World) !Level {
+        _ = world;
         var player: character.Player = undefined;
         const ldtk = try Ldtk.init("assets/sample.ldtk");
         var collisions = std.ArrayList([]rl.Rectangle).init(allocator);

@@ -659,3 +659,14 @@ pub const Timer = struct {
         self.finished = false;
     }
 };
+
+pub const Transform = struct { translation: rl.Vector2 };
+pub const MoveSpeed = struct { base: f32 };
+pub const Throwing = struct { min_strength: f32 = 10, max_strength: f32 = 100, current_strength: f32 = 10, charge_timer: Timer = Timer.init(1.5) };
+
+pub const ImprovedItem = enum { rock, key, relic };
+
+pub const HeldItem = struct {
+    type: ImprovedItem,
+    ptr: *items.ItemPickup,
+};

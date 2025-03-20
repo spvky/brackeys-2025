@@ -1,4 +1,5 @@
 const std = @import("std");
+const World = @import("world.zig").World;
 const rl = @import("raylib");
 const Path = @import("path.zig").Path;
 const transitions = @import("transition.zig");
@@ -507,7 +508,7 @@ pub fn start_game_cb() void {}
 
 pub fn main() !void {
     rl.setConfigFlags(.{ .window_resizable = true, .borderless_windowed_mode = true });
-
+    var world: World = World.init(std.heap.page_allocator);
     rl.initWindow(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE);
     rl.initAudioDevice();
     defer rl.closeAudioDevice();
@@ -523,8 +524,8 @@ pub fn main() !void {
         "assets/shaders/occlusion.fs",
     );
 
-    const level = try Level.init(std.heap.page_allocator);
-    const proto_level = try Level.init(std.heap.page_allocator);
+    const level = try Level.init(std.heap.page_allocator, &world);
+    const proto_level = try Level.init(std.heap.page_allocator, &world);
     var state: State = .{
         .gameplay_scene = .{
             .scene = try rl.loadRenderTexture(RENDER_WIDTH, RENDER_HEIGHT),
