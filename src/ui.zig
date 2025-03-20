@@ -27,7 +27,8 @@ pub const UiState = struct {
     pub fn draw(player: Player, ui_assets: UiAssets, level_index: usize) void {
         rl.drawTextureEx(ui_assets.held_item, .{ .x = 5, .y = 20 }, 0, 4.5, rl.Color.white);
 
-        UiState.draw_pickup_text(player);
+        // Fix this eventually
+        // UiState.draw_pickup_text(player);
         switch (player.held_item) {
             .rock => {
                 rl.drawTextureEx(ui_assets.rock, .{ .x = 5, .y = 20 }, 0, 4.5, rl.Color.white);
@@ -47,25 +48,28 @@ pub const UiState = struct {
         }
     }
 
-    fn draw_pickup_text(player: Player) void {
-        if (player.over_item != .none) {
-            const tag = std.enums.tagName(Item, player.over_item) orelse "invalid";
-            const screen_width: i32 = rl.getScreenWidth();
-            const screen_height: i32 = rl.getScreenHeight();
+    // fn draw_pickup_text(player: Player) void {
+    //     if (player.over_item != .none) {
+    //         const tag = std.enums.tagName(Item, player.over_item) orelse "invalid";
+    //         var terminated_tag: [7:0]u8 = undefined;
+    //         terminated_tag[7] = 0;
+    //         @memcpy(&terminated_tag, tag);
+    //         const screen_width: i32 = rl.getScreenWidth();
+    //         const screen_height: i32 = rl.getScreenHeight();
 
-            const insctruction_width = rl.measureText("press [E] to pick up", 50);
-            const item_type_width = rl.measureText(@ptrCast(tag.ptr), 50);
+    //         const insctruction_width = rl.measureText("press [E] to pick up", 50);
+    //         const item_type_width = rl.measureText(&terminated_tag, 50);
 
-            const mid_point: i32 = @divTrunc(screen_width, 2);
+    //         const mid_point: i32 = @divTrunc(screen_width, 2);
 
-            const insctruction_x_pos = mid_point - @divTrunc(insctruction_width, 2);
-            const item_type_x_pos = mid_point - @divTrunc(item_type_width, 2);
+    //         const insctruction_x_pos = mid_point - @divTrunc(insctruction_width, 2);
+    //         const item_type_x_pos = mid_point - @divTrunc(item_type_width, 2);
 
-            const instruction_y_pos: i32 = @as(i32, @intFromFloat(@as(f32, @floatFromInt(screen_height)) * 0.85));
-            const item_type_y_pos: i32 = @as(i32, @intFromFloat(@as(f32, @floatFromInt(screen_height)) * 0.9));
+    //         const instruction_y_pos: i32 = @as(i32, @intFromFloat(@as(f32, @floatFromInt(screen_height)) * 0.85));
+    //         const item_type_y_pos: i32 = @as(i32, @intFromFloat(@as(f32, @floatFromInt(screen_height)) * 0.9));
 
-            rl.drawText("press [E] to pick up", insctruction_x_pos, instruction_y_pos, 50, rl.Color.black);
-            rl.drawText(@ptrCast(tag.ptr), item_type_x_pos, item_type_y_pos, 50, rl.Color.black);
-        }
-    }
+    //         rl.drawText("press [E] to pick up", insctruction_x_pos, instruction_y_pos, 50, rl.Color.black);
+    //         rl.drawText(&terminated_tag, item_type_x_pos, item_type_y_pos, 50, rl.Color.black);
+    //     }
+    // }
 };

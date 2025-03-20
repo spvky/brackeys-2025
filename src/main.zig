@@ -153,9 +153,12 @@ const MenuScene = struct {
         background_color = background_color.alpha(0.3);
         rl.clearBackground(background_color);
 
-        const big_size = 20;
-        const str_len: i32 = @intCast(rl.textLength(@ptrCast(self.title.ptr)));
-        rl.drawText(@ptrCast(self.title.ptr), MENU_WIDTH / 2 - @divTrunc(str_len, 2) * 10, 20, big_size, rl.Color.black);
+        // const big_size = 20;
+        // var terminated_title: [20:0]u8 = undefined;
+        // terminated_title[20] = 0;
+        // @memcpy(&terminated_title, self.title);
+        // const str_len: i32 = @intCast(rl.textLength(&terminated_title));
+        // rl.drawText(&terminated_title, MENU_WIDTH / 2 - @divTrunc(str_len, 2) * 10, 20, big_size, rl.Color.black);
 
         const font_size: i32 = 8;
         for (self.menu_options, 0..) |option, idx| {
